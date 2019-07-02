@@ -1,0 +1,7 @@
+sections:
+  breaking: Breaking Changes
+  nonbreaking: nonBreaking Changes
+
+tags:
+  - newfeature
+  - bugfix
