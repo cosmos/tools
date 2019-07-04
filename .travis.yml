@@ -10,3 +10,4 @@ before_script:
 script:
   - golangci-lint run
   - go install ./cmd/clog
+  - go install ./cmd/runsim
