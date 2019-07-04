@@ -1,6 +1,3 @@
-[![Build Status](https://travis-ci.com/alessio/clog.svg?branch=master)](https://travis-ci.com/alessio/clog)
-[![GolangCI](https://golangci.com/badges/github.com/alessio/clog.svg)](https://golangci.com/r/github.com/alessio/clog)
-
 # clog
 
 Maintain changelog files in modular fashion 
