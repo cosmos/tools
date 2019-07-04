@@ -142,7 +142,7 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		_ = <-sigs
+		<-sigs
 		fmt.Println()
 
 		// drain the queue
