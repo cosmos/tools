@@ -93,7 +93,7 @@ func main() {
 	runsimLogfile, err := os.OpenFile("sim_log_file", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
 		log.Fatalf("couldn't open sim_log_file: %v", err)
-	} 
+	}
 	log.SetOutput(io.MultiWriter(os.Stdout, runsimLogfile))
 
 	flag.Parse()

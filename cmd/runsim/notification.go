@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"github.com/pkg/errors"
 	"log"
 	"os"
 	"path/filepath"
