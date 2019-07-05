@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -8,76 +9,94 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/nlopes/slack"
 )
 
 const (
 	logBucketPrefix = "sim-logs-"
+	queueNamePrefix = "gaia-sim-"
 	awsRegion       = "us-east-1"
 )
 
-func awsErrHandler(err error) error {
-	if awsErr, ok := err.(awserr.Error); ok {
-		switch awsErr.Code() {
-		default:
-			return awsErr
-		}
+// checkIfLast will check the SQS queue for any messages.
+// If there are no messages left, that means this is the last instance running a simulation. Return true.
+func checkIfLast() bool {
+	svc := sqs.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	})))
+	queues, err := svc.ListQueues(&sqs.ListQueuesInput{
+		QueueNamePrefix: aws.String(queueNamePrefix),
+	})
+	if err != nil {
+		log.Printf("%v", err)
+		return true
 	}
-	return err
+	message, err := svc.ReceiveMessage(&sqs.ReceiveMessageInput{
+		QueueUrl:            queues.QueueUrls[0],
+		MaxNumberOfMessages: aws.Int64(1),
+	})
+	if err != nil {
+		log.Printf("%v", err)
+		return true
+	}
+	if len(message.Messages) > 0 {
+		_, _ = svc.DeleteMessage(&sqs.DeleteMessageInput{
+			QueueUrl:      queues.QueueUrls[0],
+			ReceiptHandle: message.Messages[0].ReceiptHandle,
+		})
+		return false
+	}
+	return true
 }
 
 func makeObjKey(objKeyPrefix string, fileName string) string {
 	return fmt.Sprintf("%s/%s", objKeyPrefix, fileName)
 }
 
-// putObjects attempts to upload to an S3 bucket the content of each file from fileHandles.
-// File descriptors have their read offset set to 0 to ensure all the content is uploaded.
-// Each file will become an S3 bucket object that can be accessed via its object key.
-//
-// Function returns the list of object keys and an error, if any.
-func putObjects(svc *s3.S3, objKeyPrefix string, bucketName string, fileHandles ...*os.File) ([]string, error) {
-	objKeys := make([]string, len(fileHandles))
-	for index, fileHandle := range fileHandles {
-		_, _ = fileHandle.Seek(0, 0)
-		objKey := makeObjKey(objKeyPrefix, filepath.Base(fileHandle.Name()))
-		stdOutObjInput := &s3.PutObjectInput{
-			Body:   aws.ReadSeekCloser(fileHandle),
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(objKey),
-		}
-		_, err := svc.PutObject(stdOutObjInput)
-		if err != nil {
-			return nil, awsErrHandler(err)
-		}
-		objKeys[index] = objKey
+func getLogBucket(sessionS3 *s3.S3) (string, error) {
+	var logBucket string
+	outputListBuckets, err := sessionS3.ListBuckets(&s3.ListBucketsInput{})
+	if err != nil {
+		return logBucket, err
 	}
-	return objKeys, nil
+	for _, bucket := range outputListBuckets.Buckets {
+		if strings.Contains(*bucket.Name, logBucketPrefix) {
+			logBucket = *bucket.Name
+		}
+	}
+	return logBucket, nil
 }
 
-func pushLogs(stdOut *os.File, stdErr *os.File, folderName string) ([]string, *string, error) {
-	var logBucket *string
-
+func pushLogs(gitRev string, fileHandles ...*os.File) ([]string, string, error) {
+	var objKey, logBucket string
+	objKeys := make([]string, len(fileHandles))
 	sessionS3 := s3.New(session.Must(session.NewSession(&aws.Config{
 		Region: aws.String(awsRegion),
 	})))
-	listBucketsOutput, err := sessionS3.ListBuckets(&s3.ListBucketsInput{})
+	logBucket, err := getLogBucket(sessionS3)
 	if err != nil {
-		return nil, nil, awsErrHandler(err)
+		return objKeys, logBucket, err
+	} else if logBucket == "" {
+		return objKeys, logBucket, errors.New("ERROR: could not find log bucket")
 	}
-	for _, bucket := range listBucketsOutput.Buckets {
-		if strings.Contains(*bucket.Name, logBucketPrefix) {
-			logBucket = bucket.Name
-			objKeys, err := putObjects(sessionS3, folderName, *logBucket, stdOut, stdErr)
-			if err != nil {
-				return nil, nil, err
-			}
-			return objKeys, bucket.Name, nil
+
+	for index, fileHandle := range fileHandles {
+		_, _ = fileHandle.Seek(0, 0)
+		objKey = makeObjKey(gitRev, filepath.Base(fileHandle.Name()))
+		_, err := sessionS3.PutObject(&s3.PutObjectInput{
+			Body:   aws.ReadSeekCloser(fileHandle),
+			Bucket: aws.String(logBucket),
+			Key:    aws.String(objKey),
+		})
+		if err != nil {
+			return objKeys, logBucket, err
 		}
+		objKeys[index] = objKey
 	}
-	return nil, nil, nil
+	return objKeys, logBucket, nil
 }
 
 func slackMessage(token string, channel string, threadTS *string, message string) {
