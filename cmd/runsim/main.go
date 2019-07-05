@@ -52,7 +52,7 @@ var (
 	genesis      string
 	exitOnFail   bool
 	githubConfig string
-	logObjKey    string
+	logObjprefix string
 	slackConfig  string
 
 	// integration with Slack and Github
@@ -68,13 +68,6 @@ func init() {
 	log.SetPrefix("")
 	log.SetFlags(0)
 
-	runsimLogfile, err := os.OpenFile("sim_log_file", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
-	if err != nil {
-		log.Printf("ERROR: opening log file: %v", err.Error())
-	} else {
-		log.SetOutput(io.MultiWriter(os.Stdout, runsimLogfile))
-	}
-
 	procs = map[int]*os.Process{}
 	mutex = &sync.Mutex{}
 
@@ -82,7 +75,7 @@ func init() {
 	flag.StringVar(&genesis, "g", "", "Genesis file")
 	flag.StringVar(&seedOverrideList, "seeds", "", "run the supplied comma-separated list of seeds instead of defaults")
 	flag.BoolVar(&exitOnFail, "e", false, "Exit on fail during multi-sim, print error")
-	flag.StringVar(&logObjKey, "log", "", "S3 object key for log files")
+	flag.StringVar(&logObjprefix, "log", "", "S3 object key for log files")
 	flag.StringVar(&githubConfig, "github", "", "Report results to Github's PR")
 	flag.StringVar(&slackConfig, "slack", "", "Report results to slack channel")
 
@@ -96,6 +89,13 @@ Run simulations in parallel`, filepath.Base(os.Args[0]))
 
 func main() {
 	var err error
+
+	runsimLogfile, err := os.OpenFile("sim_log_file", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		log.Printf("ERROR: opening log file: %v", err.Error())
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stdout, runsimLogfile))
+	}
 
 	flag.Parse()
 	if flag.NArg() != 4 {
@@ -194,16 +194,18 @@ wait:
 		}
 	}
 
+	if slackConfigSupplied() {
+		if checkIfLast() {
+			_, _, _ = pushLogs(logObjprefix, runsimLogfile)
+			slackMessage(slackToken, slackChannel, &slackThread, fmt.Sprintln("Simulation is finished!"))
+		}
+	}
+
 	// analyse results and exit with 1 on first error
 	close(results)
 	for rc := range results {
 		if !rc {
 			os.Exit(1)
-		}
-	}
-	if slackConfigSupplied() {
-		if checkIfLast() {
-			slackMessage(slackToken, slackChannel, &slackThread, fmt.Sprintln("Simulation is finished!"))
 		}
 	}
 	os.Exit(0)
@@ -225,12 +227,12 @@ func makeFilename(seed int) string {
 	return fmt.Sprintf("app-simulation-seed-%d-date-%s", seed, time.Now().Format("01-02-2006_150405"))
 }
 
-func makeFailSlackMsg(seed int, stdoutKey, stderrKey, bucket string, logsPushed bool) string {
+func makeFailedSeedMsg(seed int, stdoutKey, stderrKey, bucket string, logsPushed bool) string {
 	if logsPushed {
 		return fmt.Sprintf("*Seed %s: FAILED*. *<https://%s.s3.amazonaws.com/%s|stdout>* *<https://%s.s3.amazonaws.com/%s|stderr>*\nTo reproduce run: ```\n%s\n```",
 			strconv.Itoa(seed), bucket, stdoutKey, bucket, stderrKey, buildCommand(testname, blocks, period, genesis, seed))
 	}
-	return fmt.Sprintf("*Seed %s: FAILED*. \nTo reproduce run: ```\n%s\n```\n*Could not upload logs:* ```\n%s\n```",
+	return fmt.Sprintf("*Seed %s: FAILED*. \nTo reproduce run: ```\n%s\n```\n*Log upload failed:* ```\n%s\n```",
 		strconv.Itoa(seed), buildCommand(testname, blocks, period, genesis, seed), bucket)
 }
 
@@ -243,22 +245,24 @@ func worker(id int, seeds <-chan int) {
 			log.Printf("[W%d] Seed %d: FAILED", id, seed)
 			log.Printf("To reproduce run: %s", buildCommand(testname, blocks, period, genesis, seed))
 			if slackConfigSupplied() {
-				objKeys, bucket, err := pushLogs(stdOut, stdErr, logObjKey)
+				objKeys, bucket, err := pushLogs(logObjprefix, stdOut, stdErr)
 				if err != nil {
-					slackMessage(slackToken, slackChannel, nil, makeFailSlackMsg(seed, "", "", err.Error(), false))
+					slackMessage(slackToken, slackChannel, &slackThread, makeFailedSeedMsg(seed, "", "", err.Error(), false))
+				} else {
+					slackMessage(slackToken, slackChannel, &slackThread, makeFailedSeedMsg(seed, objKeys[0], objKeys[1], bucket, true))
 				}
-				slackMessage(slackToken, slackChannel, nil, makeFailSlackMsg(seed, objKeys[0], objKeys[1], *bucket, true))
 			}
 			if exitOnFail {
 				log.Printf("\bERROR OUTPUT \n\n%s", err)
 				panic("halting simulations")
 			}
-		}
-		log.Printf("[W%d] Seed %d: OK", id, seed)
-		if slackConfigSupplied() {
-			_, _, err = pushLogs(stdOut, stdErr, logObjKey)
-			if err != nil {
-				log.Printf("%v", err)
+		} else {
+			log.Printf("[W%d] Seed %d: OK", id, seed)
+			if slackConfigSupplied() {
+				_, _, err = pushLogs(logObjprefix, stdOut, stdErr)
+				if err != nil {
+					log.Printf("%v", err)
+				}
 			}
 		}
 	}
