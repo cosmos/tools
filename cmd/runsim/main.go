@@ -202,11 +202,9 @@ wait:
 		}
 	}
 	if slackConfigSupplied() {
-		seedStrings := make([]string, len(seeds))
-		for i, seed := range seeds {
-			seedStrings[i] = fmt.Sprintf("%d", seed)
+		if checkIfLast() {
+			slackMessage(slackToken, slackChannel, &slackThread, fmt.Sprintln("Simulation is finished!"))
 		}
-		slackMessage(slackToken, slackChannel, &slackThread, fmt.Sprintf("Finished running simulation for seeds: %s", strings.Join(seedStrings, " ")))
 	}
 	os.Exit(0)
 }

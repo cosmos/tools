@@ -11,11 +11,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/nlopes/slack"
 )
 
 const (
 	logBucketPrefix = "sim-logs-"
+	queueNamePrefix = "gaia-sim-"
 	awsRegion       = "us-east-1"
 )
 
@@ -27,6 +29,35 @@ func awsErrHandler(err error) error {
 		}
 	}
 	return err
+}
+
+// checkIfLast will check the SQS queue for any messages.
+// If there are no messages left, that means this is the last instance running a simulation. Return true.
+func checkIfLast() bool {
+	svc := sqs.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	})))
+	queues, err := svc.ListQueues(&sqs.ListQueuesInput{
+		QueueNamePrefix: aws.String(queueNamePrefix),
+	})
+	if err != nil {
+		return true
+	}
+	message, err := svc.ReceiveMessage(&sqs.ReceiveMessageInput{
+		QueueUrl:            queues.QueueUrls[0],
+		MaxNumberOfMessages: aws.Int64(1),
+	})
+	if err != nil {
+		return true
+	}
+	if len(message.Messages) > 0 {
+		_, _ = svc.DeleteMessage(&sqs.DeleteMessageInput{
+			QueueUrl:      queues.QueueUrls[0],
+			ReceiptHandle: message.Messages[0].ReceiptHandle,
+		})
+		return false
+	}
+	return true
 }
 
 func makeObjKey(objKeyPrefix string, fileName string) string {
