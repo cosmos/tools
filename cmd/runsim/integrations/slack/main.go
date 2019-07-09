@@ -92,7 +92,7 @@ func getSsmParameter(parameterName string) (string, error) {
 func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
 	circleApiPayload := new(CircleApiPayload)
 	reFields := regexp.MustCompile(`^token.*?&command=(.*?)&text=(.*?)&response_url=(.*?)&`)
-	reBlocks := regexp.MustCompile(`^[0-9][0-9]{0,3}$`)
+	reBlocks := regexp.MustCompile(`^[1-9][0-9]{0,3}$`)
 
 	matches := reFields.FindStringSubmatch(slashCmdPayload)
 	for _, match := range matches[1:] {
@@ -124,6 +124,7 @@ func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
 					circleApiPayload.BuildParameters.Genesis = "true"
 				// Without this case the branch will be set to "no"
 				// Temporary solution until we figure out how to handle custom genesis better
+				// TODO: Figure out a better way to handle genesis file
 				case "no":
 					circleApiPayload.BuildParameters.Genesis = "false"
 				default:
