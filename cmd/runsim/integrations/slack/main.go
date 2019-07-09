@@ -122,6 +122,10 @@ func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
 					circleApiPayload.BuildParameters.Blocks = param
 				case "yes":
 					circleApiPayload.BuildParameters.Genesis = "true"
+				// Without this case the branch will be set to "no"
+				// Temporary solution until we figure out how to handle custom genesis better
+				case "no":
+					circleApiPayload.BuildParameters.Genesis = "false"
 				default:
 					circleApiPayload.BuildParameters.CommitHash = param
 				}
