@@ -10,3 +10,5 @@ before_script:
 script:
   - go install ./cmd/clog
   - go install ./cmd/runsim
+  - go install ./cmd/runsim/execmgmt
+  - go install ./cmd/runsim/integrations/slack
