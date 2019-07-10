@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/nlopes/slack"
 )
 
 const instanceShutdownBehaviour = "terminate"
@@ -69,6 +70,23 @@ func buildCommand(jobs int, logObjKey, seeds, token, channel, timeStamp, blocks,
 	}
 	return fmt.Sprintf("runsim -log \"%s\" -j %d -seeds \"%s\" -slack \"%s,%s,%s\" github.com/cosmos/cosmos-sdk/simapp %s %s TestFullAppSimulation;",
 		logObjKey, jobs, seeds, token, channel, timeStamp, blocks, period)
+}
+
+func slackMessage(token string, channel string, threadTS *string, message string) (string, error) {
+	client := slack.New(token)
+	if threadTS != nil {
+		_, respTS, err := client.PostMessage(channel, slack.MsgOptionText(message, false), slack.MsgOptionTS(*threadTS))
+		if err != nil {
+			return "", err
+		}
+		return respTS, nil
+	} else {
+		_, respTS, err := client.PostMessage(channel, slack.MsgOptionText(message, false))
+		if err != nil {
+			return "", err
+		}
+		return respTS, nil
+	}
 }
 
 func main() {
