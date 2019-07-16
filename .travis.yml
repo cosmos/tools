@@ -8,7 +8,7 @@ install: true
 before_script:
   - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.17.1
 script:
-  - go install ./cmd/clog
-  - go install ./cmd/runsim
-  - go install ./cmd/runsim/execmgmt
-  - go install ./cmd/runsim/integrations/slack
+  - go install github.com/cosmos/tools/cmd/clog
+  - go install github.com/cosmos/tools/cmd/runsim
+  - go install github.com/cosmos/tools/cmd/runsim/execmgmt
+  - go install github.com/cosmos/tools/cmd/runsim/integrations/slack
