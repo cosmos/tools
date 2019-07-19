@@ -114,7 +114,7 @@ func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
 		// The second part of the command can contain absolutely anything that the user might decide to type.
 		// It is common to use this text parameter to provide extra context for the command.
 		simParams := strings.Split(match, "+")
-		log.Printf("Slash command parameters: %v", simParams)
+		log.Printf("INFO: slash command parameters: %v", simParams)
 		if len(simParams) > 1 {
 			for _, param := range simParams {
 				switch param {
@@ -210,6 +210,7 @@ func triggerCircleciJob(payload CircleApiPayload) error {
 	if jsonPayload, err = json.Marshal(payload); err != nil {
 		return err
 	}
+	log.Printf("INFO: circleci payload: %v", jsonPayload)
 	if request, err = http.NewRequest("POST", circleJobUrl, bytes.NewBuffer(jsonPayload)); err != nil {
 		return err
 	}
