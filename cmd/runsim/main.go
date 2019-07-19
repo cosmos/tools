@@ -22,7 +22,7 @@ import (
 const (
 	GithubConfigSep = ","
 	SlackConfigSep  = ","
-	ExportParamsPath = "/tmp/sim_params"
+	ExportParamsPath = "/tmp/sim_params.json"
 	ExportStatePath = "/tmp/sim_state"
 )
 
