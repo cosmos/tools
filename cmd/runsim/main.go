@@ -23,7 +23,7 @@ const (
 	GithubConfigSep = ","
 	SlackConfigSep  = ","
 	ExportParamsPath = "/tmp/sim_params.json"
-	ExportStatePath = "/tmp/sim_state"
+	ExportStatePath = "/tmp/sim_state.json"
 )
 
 var (
