@@ -22,6 +22,8 @@ import (
 const (
 	GithubConfigSep = ","
 	SlackConfigSep  = ","
+	ExportParamsPath = "/tmp/sim_params.json"
+	ExportStatePath = "/tmp/sim_state.json"
 )
 
 var (
@@ -211,10 +213,9 @@ wait:
 }
 
 func buildCommand(testName, blocks, period, genesis string, seed int) string {
-	return fmt.Sprintf("go test %s -run %s -SimulationEnabled=true "+
-		"-SimulationNumBlocks=%s -SimulationGenesis=%s "+
-		"-SimulationVerbose=true -SimulationCommit=true -SimulationSeed=%d -SimulationPeriod=%s -v -timeout 24h",
-		pkgName, testName, blocks, genesis, seed, period)
+	return fmt.Sprintf("go test %s -run %s -Enabled=true -NumBlocks=%s -Genesis=%s -Verbose=true " +
+		"-Commit=true -Seed=%d -Period=%s -ExportParamsPath %s -ExportStatePath %s -timeout 24h",
+		pkgName, testName, blocks, genesis, seed, period, ExportParamsPath, ExportStatePath)
 }
 
 func makeCmd(cmdStr string) *exec.Cmd {
