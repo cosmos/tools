@@ -214,7 +214,7 @@ wait:
 
 func buildCommand(testName, blocks, period, genesis string, seed int) string {
 	return fmt.Sprintf("go test %s -run %s -Enabled=true -NumBlocks=%s -Genesis=%s -Verbose=true " +
-		"-Commit=true -Seed=%d -Period=%s -Verbose -ExportParamsPath %s -ExportStatePath %s -timeout 24h",
+		"-Commit=true -Seed=%d -Period=%s -ExportParamsPath %s -ExportStatePath %s -timeout 24h",
 		pkgName, testName, blocks, genesis, seed, period, ExportParamsPath, ExportStatePath)
 }
 
