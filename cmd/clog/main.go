@@ -315,41 +315,6 @@ func generateChangelog(version string) error {
 		fmt.Println()
 	}
 
-	// for sectionDir, sectionTitle := range config.Sections {
-	// 	sectionTitlePrinted := false
-
-	// 	for _, tag := range config.Tags {
-	// 		path := filepath.Join(entriesDir, sectionDir, tag)
-
-	// files, err := directoryContents(path)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-
-	// 		// fmt.Println("FILES:", files)
-
-	// 		if len(files) == 0 {
-	// 			continue
-	// 		}
-
-	// 		if !sectionTitlePrinted {
-	// 			fmt.Printf("### %s\n\n", sectionTitle)
-	// 			sectionTitlePrinted = true
-	// 		}
-
-	// 		for _, f := range files {
-	// 			verboseLog.Println("processing", f.Name())
-	// 			filename := filepath.Join(path, f.Name())
-
-	// 			if err := indentAndPrintFile(tag, filename); err != nil {
-	// 				return err
-	// 			}
-	// 		}
-
-	// 		fmt.Println()
-	// 	}
-	// }
-
 	return nil
 }
 
