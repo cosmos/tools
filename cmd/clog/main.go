@@ -4,6 +4,7 @@ package main
 //
 //  Copyright (C) 2019 Alessio Treglia <alessio@tendermint.com>
 //  Copyright (C) 2019 Rigel Rozanski <rigel@tendermint.com>
+//  Copyright (C) 2019 Aleksandr Bezobchuk <bez@tendermint.com>
 //
 // and distributed under the terms of the Apache License, Version 2.0.
 //
