@@ -34,15 +34,16 @@ const (
 )
 
 var (
-	verboseLog        *log.Logger
-	config            Config
-	cwd               string
+	verboseLog *log.Logger
+	config     Config
+	cwd        string
+
 	entriesDir        string
 	verboseLogging    bool
 	interactiveMode   bool
 	generateVerString string
-	flagMessage       string
-	flagTag           string
+	message           string
+	tag               string
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
@@ -62,23 +63,22 @@ var (
 				return addEntryFileFromConsoleInput()
 			}
 
-			if len(args) < 2 {
-				log.Println("must include at least 2 arguments when not in interactive mode")
+			if len(args) != 1 {
+				log.Println("must provide section when not in interactive mode")
 				return nil
 			}
 
-			sectionDir, tagDir := args[0], args[1]
+			sectionDir := args[0]
 
-			err := validateSectionTagDirs(sectionDir, tagDir)
-			if err != nil {
+			if err := validateSectionTagDirs(sectionDir, tag); err != nil {
 				return err
 			}
 
-			if len(args) == 3 {
-				return addSinglelineEntryFile(sectionDir, tagDir, strings.TrimSpace(args[2]))
+			if message != "" {
+				return addSinglelineEntryFile(sectionDir, tag, strings.TrimSpace(message))
 			}
 
-			return addEntryFile(sectionDir, tagDir)
+			return addEntryFile(sectionDir, tag)
 		},
 	}
 
@@ -112,8 +112,8 @@ func init() {
 
 	generateCmd.Flags().StringVarP(&generateVerString, "release", "r", "UNRELEASED", "release's version string")
 	addCmd.Flags().BoolVarP(&interactiveMode, "interactive", "i", false, "get the section, tag, and message with interactive CLI prompts")
-	addCmd.Flags().StringVarP(&flagMessage, "message", "m", "", "pending changelog entry message")
-	addCmd.Flags().StringVarP(&flagTag, "tag", "t", "", "pending changelog entry tag")
+	addCmd.Flags().StringVarP(&message, "message", "m", "", "pending changelog entry message")
+	addCmd.Flags().StringVarP(&tag, "tag", "t", "", "pending changelog entry tag")
 
 	cwd = checkGetcwd()
 	rootCmd.PersistentFlags().BoolVarP(&verboseLogging, "verbose-logging", "v", false, "enable verbose logging")
@@ -146,27 +146,27 @@ func addEntryFileFromConsoleInput() error {
 	sectionDir = strings.TrimSpace(sectionDir)
 
 	if _, ok := config.Sections[sectionDir]; !ok {
-		return errors.New("invalid section; please try again")
+		return fmt.Errorf("invalid section: %s; please try again", sectionDir)
 	}
 
-	var tag string
+	var tagInput string
 
 	if len(config.Tags) > 0 {
 		fmt.Fprintf(os.Stderr, "Please enter one of the following tags (optional) %v: ", config.Tags)
 
-		tag, _ = reader.ReadString('\n')
-		tag = strings.TrimSpace(tag)
-		ok := false
+		tagInput, _ = reader.ReadString('\n')
+		tagInput = strings.TrimSpace(tagInput)
+		validTag := false
 
 		for _, t := range config.Tags {
-			if t == tag {
-				ok = true
+			if t == tagInput {
+				validTag = true
 				break
 			}
 		}
 
-		if !ok && tag != "" {
-			return errors.New("invalid tag; please try again")
+		if !validTag && tagInput != "" {
+			return fmt.Errorf("invalid tag: %s; please try again", tagInput)
 		}
 	}
 
@@ -176,10 +176,10 @@ func addEntryFileFromConsoleInput() error {
 	message = strings.TrimSpace(message)
 
 	if message == "" {
-		return addEntryFile(sectionDir, tag)
+		return addEntryFile(sectionDir, tagInput)
 	}
 
-	return addSinglelineEntryFile(sectionDir, tag, message)
+	return addSinglelineEntryFile(sectionDir, tagInput, message)
 }
 
 func addSinglelineEntryFile(sectionDir, tagDir, message string) error {
@@ -219,13 +219,13 @@ func generateFileName(line string) string {
 		}
 	}
 
-	ret := strings.Join(chunks, "-")
+	filename := fmt.Sprintf("_%s", strings.Join(chunks, "-"))
 
-	if len(ret) > maxEntryFilenameLength {
-		return ret[:maxEntryFilenameLength]
+	if len(filename) > maxEntryFilenameLength {
+		return filename[:maxEntryFilenameLength]
 	}
 
-	return ret
+	return filename
 }
 
 func directoryContents(dirPath string) ([]os.FileInfo, error) {
@@ -254,39 +254,101 @@ func directoryContents(dirPath string) ([]os.FileInfo, error) {
 }
 
 func generateChangelog(version string) error {
-	fmt.Printf("# %s\n\n", version)
+	fmt.Printf("## %s\n\n", version)
+
+	tags := make(map[string]bool)
+	for _, tag := range config.Tags {
+		tags[tag] = true
+	}
 
 	for sectionDir, sectionTitle := range config.Sections {
 		sectionTitlePrinted := false
-		for _, tag := range config.Tags {
-			path := filepath.Join(entriesDir, sectionDir, tag)
+		sectionDirPath := filepath.Join(entriesDir, sectionDir)
 
-			files, err := directoryContents(path)
-			if err != nil {
-				return err
-			}
+		fileInfos, err := directoryContents(sectionDirPath)
+		if err != nil {
+			return err
+		}
 
-			if len(files) == 0 {
-				continue
-			}
+		if len(fileInfos) == 0 {
+			continue
+		}
 
+		for _, fInfo := range fileInfos {
 			if !sectionTitlePrinted {
-				fmt.Printf("## %s\n\n", sectionTitle)
+				fmt.Printf("### %s\n\n", sectionTitle)
 				sectionTitlePrinted = true
 			}
 
-			for _, f := range files {
-				verboseLog.Println("processing", f.Name())
-				filename := filepath.Join(path, f.Name())
+			// Handle nested entries under the tag directory
+			if fInfo.IsDir() && tags[fInfo.Name()] {
+				tagDirPath := filepath.Join(sectionDirPath, fInfo.Name())
 
-				if err := indentAndPrintFile(tag, filename); err != nil {
+				files, err := directoryContents(tagDirPath)
+				if err != nil {
+					return err
+				}
+
+				if len(files) == 0 {
+					continue
+				}
+
+				for _, f := range files {
+					verboseLog.Println("processing", f.Name())
+					filename := filepath.Join(tagDirPath, f.Name())
+
+					if err := indentAndPrintFile(fInfo.Name(), filename); err != nil {
+						return err
+					}
+				}
+
+			} else {
+				verboseLog.Println("processing", fInfo.Name())
+				filename := filepath.Join(sectionDirPath, fInfo.Name())
+
+				if err := indentAndPrintFile("", filename); err != nil {
 					return err
 				}
 			}
-
-			fmt.Println()
 		}
+
+		fmt.Println()
 	}
+
+	// for sectionDir, sectionTitle := range config.Sections {
+	// 	sectionTitlePrinted := false
+
+	// 	for _, tag := range config.Tags {
+	// 		path := filepath.Join(entriesDir, sectionDir, tag)
+
+	// files, err := directoryContents(path)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+
+	// 		// fmt.Println("FILES:", files)
+
+	// 		if len(files) == 0 {
+	// 			continue
+	// 		}
+
+	// 		if !sectionTitlePrinted {
+	// 			fmt.Printf("### %s\n\n", sectionTitle)
+	// 			sectionTitlePrinted = true
+	// 		}
+
+	// 		for _, f := range files {
+	// 			verboseLog.Println("processing", f.Name())
+	// 			filename := filepath.Join(path, f.Name())
+
+	// 			if err := indentAndPrintFile(tag, filename); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+
+	// 		fmt.Println()
+	// 	}
+	// }
 
 	return nil
 }
@@ -327,7 +389,12 @@ func indentAndPrintFile(tag, filename string) error {
 
 		linkified := ghLinkRe.ReplaceAllString(line, ghLinkExpanded)
 		if firstLine {
-			fmt.Printf("* (%s) %s\n", tag, linkified)
+			if tag != "" {
+				fmt.Printf("* (%s) %s\n", tag, linkified)
+			} else {
+				fmt.Printf("* %s\n", linkified)
+			}
+
 			firstLine = false
 			continue
 		}
@@ -363,16 +430,24 @@ func writeEntryFile(filename string, bs []byte) error {
 
 func validateSectionTagDirs(sectionDir, tag string) error {
 	if _, ok := config.Sections[sectionDir]; !ok {
-		return fmt.Errorf("invalid section -- %s", sectionDir)
+		return fmt.Errorf("invalid section: %s; please try again", sectionDir)
 	}
+
+	validTag := false
 
 	for _, t := range config.Tags {
 		if t == tag {
-			return nil
+			validTag = true
+			break
 		}
 	}
 
-	return fmt.Errorf("invalid tag -- %s", tag)
+	if !validTag && tag != "" {
+		return fmt.Errorf("invalid tag: %s; please try again", tag)
+	}
+
+	return nil
+
 }
 
 // nolint: errcheck
