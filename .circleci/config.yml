@@ -5,7 +5,7 @@ executors:
     docker:
       - image: circleci/golang:1.12.7
     environment:
-      GO111MODULE: on
+      GO111MODULE: "on"
 
 jobs:
   build:
@@ -17,7 +17,7 @@ jobs:
           command: |
             go build ./cmd/clog
             go build ./cmd/runsim
-            go build ./cmd/runsim/slack
+            go build ./cmd/runsim/integrations/slack
             go build ./cmd/runsim/execmgmt
 
 workflows:
