@@ -77,3 +77,28 @@ func sendSqsMsg(instanceIndex []int) {
 		}
 	}
 }
+/*func checkCapacity() error {
+	var queueAttributes *sqs.GetQueueAttributesOutput
+	var queues *sqs.ListQueuesOutput
+	var numMsg int
+	sessionSQS := sqs.New(session.Must(session.NewSession()))
+
+	if queues, err = sessionSQS.ListQueues(&sqs.ListQueuesInput{
+		QueueNamePrefix: aws.String(queueNamePrefix),
+	}); err != nil {
+		return err
+	}
+	if queueAttributes, err = sessionSQS.GetQueueAttributes(&sqs.GetQueueAttributesInput{
+		AttributeNames: []*string{aws.String("ApproximateNumberOfMessages")},
+		QueueUrl:       queues.QueueUrls[0],
+	}); err != nil {
+		return err
+	}
+	if numMsg, err = strconv.Atoi(*queueAttributes.Attributes["ApproximateNumberOfMessages"]); err != nil {
+		return err
+	}
+	if numMsg > 9 {
+		return err
+	}
+	return nil
+}*/

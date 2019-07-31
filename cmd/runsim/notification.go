@@ -117,7 +117,7 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //type GithubPayload struct {
 //	Issue struct {
 //		Number int `json:"number"`
-//		Pull   struct {
+//		Pr   struct {
 //			Url string `json:"url,omitempty"`
 //		} `json:"pull_request,omitempty"`
 //	} `json:"issue"`
@@ -126,7 +126,7 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //		Body string `json:"body"`
 //	} `json:"comment"`
 //
-//	Repository struct {
+//	Repo struct {
 //		Name  string `json:"name"`
 //		Owner struct {
 //			Login string `json:"login"`
@@ -147,7 +147,7 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //	opt.HeadBranch = pr.Head.Ref
 //	opt.HeadSHA = pr.Head.Sha
 //
-//	checkRUn, resp, err := client.Checks.CreateCheckRun(context.Background(), payload.Repository.Owner.Login, payload.Repository.Name, opt)
+//	checkRUn, resp, err := client.Checks.CreateCheckRun(context.Background(), payload.Repo.Owner.Login, payload.Repo.Name, opt)
 //	log.Printf("%v", resp)
 //	log.Printf("%v", checkRUn)
 //	if err != nil {
@@ -181,7 +181,7 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //	ts := github.Timestamp{Time: time.Now()}
 //	opt.CompletedAt = &ts
 //
-//	updatedCheck, resp, err := client.Checks.UpdateCheckRun(context.Background(), payload.Repository.Owner.Login, payload.Repository.Name, 136693316, opt)
+//	updatedCheck, resp, err := client.Checks.UpdateCheckRun(context.Background(), payload.Repo.Owner.Login, payload.Repo.Name, 136693316, opt)
 //	log.Printf("%v", updatedCheck)
 //	log.Printf("%v", resp)
 //	if err != nil {
@@ -212,8 +212,8 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //	issue := new(github.IssueComment)
 //	issue.Body = &message
 //
-//	if comment.Comment.Body == "Start sim" && comment.Issue.Pull.Url != "" {
-//		prDetails, err := getPrDetails(comment.Issue.Pull.Url)
+//	if comment.Comment.Body == "Start sim" && comment.Issue.Pr.Url != "" {
+//		prDetails, err := getPrDetails(comment.Issue.Pr.Url)
 //		if err != nil {
 //			response.StatusCode = 500
 //			response.Body = err.Error()
@@ -229,7 +229,7 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //		}
 //
 //		comments, resp, err := client.Issues.CreateComment(context.Background(),
-//			comment.Repository.Owner.Login, comment.Repository.Name, comment.Issue.Number, issue)
+//			comment.Repo.Owner.Login, comment.Repo.Name, comment.Issue.Number, issue)
 //
 //		log.Printf("%v", resp)
 //		log.Printf("%v", comments)
@@ -241,8 +241,8 @@ func slackMessage(token string, channel string, threadTS *string, message string
 //		}
 //	}
 //
-//	if comment.Comment.Body == "Update check" && comment.Issue.Pull.Url != "" {
-//		prDetails, err := getPrDetails(comment.Issue.Pull.Url)
+//	if comment.Comment.Body == "Update check" && comment.Issue.Pr.Url != "" {
+//		prDetails, err := getPrDetails(comment.Issue.Pr.Url)
 //		if err != nil {
 //			response.StatusCode = 500
 //			response.Body = err.Error()
