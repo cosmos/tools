@@ -30,7 +30,7 @@ const (
 	configFileName         = ".clog.yaml"
 	entriesDirName         = ".pending"
 	ghLinkPattern          = `#([0-9]+)\s`
-	ghLinkExpanded         = `[\#$1](https://github.com/cosmos/cosmos-sdk/issues/$1)`
+	ghLinkExpanded         = `[\#$1](https://github.com/cosmos/cosmos-sdk/issues/$1) `
 	maxEntryFilenameLength = 20
 )
 
