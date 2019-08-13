@@ -11,18 +11,13 @@ import (
 )
 
 const (
-	awsRegion       = "us-east-1"
 	queueNamePrefix = "gaia-sim-"
 )
 
-var (
-	sessionSQS = sqs.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(awsRegion),
-	})))
-)
+var sessionSQS = sqs.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
 
 func sendBatch(batchRequestEntries []*sqs.SendMessageBatchRequestEntry, queues *sqs.ListQueuesOutput) {
-	if _, err = sessionSQS.SendMessageBatch(&sqs.SendMessageBatchInput{
+	if _, err := sessionSQS.SendMessageBatch(&sqs.SendMessageBatchInput{
 		Entries:  batchRequestEntries,
 		QueueUrl: queues.QueueUrls[0],
 	}); err != nil {
@@ -42,19 +37,14 @@ func removeEmpties(batch []*sqs.SendMessageBatchRequestEntry) []*sqs.SendMessage
 }
 
 func sendSqsMsg(instanceIndex []int) {
-	var (
-		maxMessages         = 0
-		batchRequestEntries = make([]*sqs.SendMessageBatchRequestEntry, 10)
-		queues              *sqs.ListQueuesOutput
-	)
-
-	if queues, err = sessionSQS.ListQueues(&sqs.ListQueuesInput{
-		QueueNamePrefix: aws.String(queueNamePrefix),
-	}); err != nil {
-		log.Fatal(err.Error())
+	queues, err := sessionSQS.ListQueues(&sqs.ListQueuesInput{QueueNamePrefix: aws.String(queueNamePrefix)})
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
 
 	sort.Ints(instanceIndex)
+	maxMessages := 0
+	batchRequestEntries := make([]*sqs.SendMessageBatchRequestEntry, 10)
 	for index := range instanceIndex {
 		batchRequestEntries[maxMessages] = &sqs.SendMessageBatchRequestEntry{
 			Id:          aws.String(strconv.Itoa(index)),
@@ -77,28 +67,3 @@ func sendSqsMsg(instanceIndex []int) {
 		}
 	}
 }
-/*func checkCapacity() error {
-	var queueAttributes *sqs.GetQueueAttributesOutput
-	var queues *sqs.ListQueuesOutput
-	var numMsg int
-	sessionSQS := sqs.New(session.Must(session.NewSession()))
-
-	if queues, err = sessionSQS.ListQueues(&sqs.ListQueuesInput{
-		QueueNamePrefix: aws.String(queueNamePrefix),
-	}); err != nil {
-		return err
-	}
-	if queueAttributes, err = sessionSQS.GetQueueAttributes(&sqs.GetQueueAttributesInput{
-		AttributeNames: []*string{aws.String("ApproximateNumberOfMessages")},
-		QueueUrl:       queues.QueueUrls[0],
-	}); err != nil {
-		return err
-	}
-	if numMsg, err = strconv.Atoi(*queueAttributes.Attributes["ApproximateNumberOfMessages"]); err != nil {
-		return err
-	}
-	if numMsg > 9 {
-		return err
-	}
-	return nil
-}*/

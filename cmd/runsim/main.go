@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	GithubConfigSep = ","
-	SlackConfigSep  = ","
-	ExportParamsPath = "/tmp/sim_params.json"
-	ExportStatePath = "/tmp/sim_state.json"
+	// token ID used to retrieve values from secure parameter storage
+	ghAppTokenID    = "github-sim-app-key"
+	slackAppTokenID = "slack-app-key"
+
+	logBucketPrefix = "sim-logs-"
 )
 
 var (
@@ -37,34 +38,32 @@ var (
 		977367484, 491163361, 424254581, 673398983,
 	}
 	seedOverrideList = ""
+	results          chan *Seed
 
 	// goroutine-safe process map
 	procs map[int]*os.Process
 	mutex *sync.Mutex
 
-	// results channel
-	results chan bool
-
 	// command line arguments and options
-	jobs         = runtime.GOMAXPROCS(0)
-	pkgName      string
-	blocks       string
-	period       string
-	testname     string
-	genesis      string
-	exitOnFail   bool
-	githubConfig string
-	logObjprefix string
-	slackConfig  string
+	jobs                                  = runtime.GOMAXPROCS(0)
+	pkgName                               = "./simapp"
+	genesis, blocks, period, testname     string
+	simId, hostId                         string
+	notifySlack, notifyGithub, exitOnFail bool
 
-	// integration with Slack and Github
-	slackToken   string
-	slackChannel string
-	slackThread  string
-
-	// logs temporary directory
-	tempdir string
+	// log stuff
+	logObjPrefix  string
+	runsimLogFile *os.File
 )
+
+type Seed struct {
+	Num          int
+	Stdout       string
+	Stderr       string
+	ExportParams string
+	ExportState  string
+	Failed       bool
+}
 
 func init() {
 	log.SetPrefix("")
@@ -73,98 +72,106 @@ func init() {
 	procs = map[int]*os.Process{}
 	mutex = &sync.Mutex{}
 
-	flag.IntVar(&jobs, "j", jobs, "Number of parallel processes")
-	flag.StringVar(&genesis, "g", "", "Genesis file")
-	flag.StringVar(&seedOverrideList, "seeds", "", "run the supplied comma-separated list of seeds instead of defaults")
-	flag.BoolVar(&exitOnFail, "e", false, "Exit on fail during multi-sim, print error")
-	flag.StringVar(&logObjprefix, "log", "", "S3 object key for log files")
-	flag.StringVar(&githubConfig, "github", "", "Report results to Github's PR")
-	flag.StringVar(&slackConfig, "slack", "", "Report results to slack channel")
+	flag.StringVar(&genesis, "Genesis", "", "genesis file path")
+	flag.StringVar(&pkgName, "SimAppPkg", "github.com/cosmos/cosmos-sdk/simapp", "sim app package")
+	flag.StringVar(&simId, "SimId", "", "long sim ID")
+	flag.StringVar(&hostId, "HostId", "", "long sim host ID")
+	flag.StringVar(&seedOverrideList, "Seeds", "", "override default seeds with comma-separated list")
+	flag.StringVar(&logObjPrefix, "LogObjPrefix", "", "the S3 object prefix used when uploading logs")
+	flag.BoolVar(&notifySlack, "Slack", false, "report results to Slack channel")
+	flag.BoolVar(&notifyGithub, "Github", false, "update github check")
+	flag.BoolVar(&exitOnFail, "ExitOnFail", false, "exit on fail during multi-sim, print error")
+	flag.IntVar(&jobs, "Jobs", jobs, "number of parallel processes")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(),
-			`Usage: %s [-j maxprocs] [-seeds comma-separated-seed-list] [-rev git-commmit-hash] [-g genesis.json] [-e] [-github token,pr-url] [-slack token,channel,thread] [package] [blocks] [period] [testname]
-Run simulations in parallel`, filepath.Base(os.Args[0]))
+			"Usage: %s [-Jobs maxprocs] [-ExitOnFail] [-Seeds comma-separated-seed-list] [-Genesis file-path] "+
+				"[-SimAppPkg file-path] [-Github] [-Slack] [-LogObjPrefix string] [blocks] [period] [testname]\n"+
+				"Run simulations in parallel\n", filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
 	}
 }
 
 func main() {
-	var err error
-
-	runsimLogfile, err := os.OpenFile("sim_log_file", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
+	tempDir, err := ioutil.TempDir("", "sim-logs-")
 	if err != nil {
-		log.Fatalf("couldn't open sim_log_file: %v", err)
+		log.Fatalf("ERROR: ioutil.TempDir: %v", err)
 	}
-	log.SetOutput(io.MultiWriter(os.Stdout, runsimLogfile))
+
+	okZip = filepath.Join(tempDir, "ok.zip")
+	failedZip = filepath.Join(tempDir, "failed.zip")
+	exportsZip = filepath.Join(tempDir, "exports.zip")
+
+	runsimLogFile, err = os.OpenFile(filepath.Join(tempDir, "runsim_log"), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatalf("ERROR: os.OpenFile: %v", err)
+	}
+	log.SetOutput(io.MultiWriter(os.Stdout, runsimLogFile))
 
 	flag.Parse()
-	if flag.NArg() != 4 {
-		log.Fatal("wrong number of arguments")
+	if flag.NArg() != 3 {
+		log.Fatal("ERROR: wrong number of arguments")
 	}
 
-	if githubConfig != "" {
-		opts := strings.Split(githubConfig, GithubConfigSep)
-		if len(opts) != 2 {
-			log.Fatal("incorrect github config string format")
-		}
-	}
+	// initialise common test parameters
+	blocks = flag.Arg(0)
+	period = flag.Arg(1)
+	testname = flag.Arg(2)
 
-	if slackConfig != "" {
-		opts := strings.Split(slackConfig, SlackConfigSep)
-		if len(opts) != 3 {
-			log.Fatal("incorrect slack config string format")
-		}
-		slackToken, slackChannel, slackThread = opts[0], opts[1], opts[2]
+	if notifyGithub || notifySlack {
+		configIntegration()
 	}
 
 	seedOverrideList = strings.TrimSpace(seedOverrideList)
 	if seedOverrideList != "" {
-		seeds, err = makeSeedList(seedOverrideList)
+		seeds, err = buildSeedList(seedOverrideList)
 		if err != nil {
+			if notifyGithub || notifySlack {
+				pushNotification(true, fmt.Sprintf("Host %s: ERROR: buildSeedList: %v", hostId, err))
+			}
 			log.Fatal(err)
 		}
 	}
 
-	queue := make(chan int, len(seeds))
+	seedQueue := make(chan *Seed, len(seeds))
 	for _, seed := range seeds {
-		queue <- seed
+		seedQueue <- &Seed{
+			Num:          seed,
+			Stderr:       filepath.Join(tempDir, buildLogFileName(seed)+".stderr"),
+			Stdout:       filepath.Join(tempDir, buildLogFileName(seed)+".stdout"),
+			ExportParams: filepath.Join(tempDir, fmt.Sprintf("sim_params-%d.json", seed)),
+			ExportState:  filepath.Join(tempDir, fmt.Sprintf("sim_state-%d.json", seed)),
+			Failed:       false,
+		}
 	}
-	close(queue)
+	close(seedQueue)
 
 	// jobs cannot be > len(seeds)
 	if jobs > len(seeds) {
 		jobs = len(seeds)
 	}
-	results = make(chan bool, len(seeds))
 
 	// setup signal handling
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
+	results = make(chan *Seed, len(seeds))
 	go func() {
 		<-sigs
 		fmt.Println()
 
 		// drain the queue
 		log.Printf("Draining seeds queue...")
-		for seed := range queue {
-			log.Printf("%d", seed)
+		for seed := range seedQueue {
+			log.Printf("%d", seed.Num)
 		}
 		log.Printf("Kill all remaining processes...")
 		killAllProcs()
+		if notifyGithub || notifySlack {
+			uploadLogAndExit()
+		}
 		os.Exit(1)
 	}()
-
-	// initialise common test parameters
-	pkgName = flag.Arg(0)
-	blocks = flag.Arg(1)
-	period = flag.Arg(2)
-	testname = flag.Arg(3)
-	tempdir, err = ioutil.TempDir("", "")
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// set up worker pool
 	log.Printf("Allocating %d workers...", jobs)
@@ -174,7 +181,7 @@ func main() {
 
 		go func(workerID int) {
 			defer wg.Done()
-			worker(workerID, queue)
+			worker(workerID, seedQueue, results)
 		}(workerID)
 	}
 
@@ -195,119 +202,98 @@ wait:
 		}
 	}
 
-	if slackConfigSupplied() {
-		if checkIfLast() {
-			_, _, _ = pushLogs(logObjprefix, runsimLogfile)
-			slackMessage(slackToken, slackChannel, &slackThread, fmt.Sprintln("Simulation is finished!"))
+	// analyze results and collect the log file handles
+	close(results)
+	var okSeeds, failedSeeds, exports []string
+	for seed := range results {
+		if seed.Failed {
+			failedSeeds = append(failedSeeds, seed.Stderr, seed.Stdout)
+		} else {
+			okSeeds = append(okSeeds, seed.Stderr, seed.Stdout)
 		}
+		exports = append(exports, seed.ExportParams, seed.ExportState)
 	}
 
-	// analyse results and exit with 1 on first error
-	close(results)
-	for rc := range results {
-		if !rc {
-			os.Exit(1)
-		}
+	if notifyGithub || notifySlack {
+		publishResults(okSeeds, failedSeeds, exports)
 	}
+
+	if len(failedSeeds) > 0 {
+		os.Exit(1)
+	}
+
 	os.Exit(0)
 }
 
-func buildCommand(testName, blocks, period, genesis string, seed int) string {
-	return fmt.Sprintf("go test %s -run %s -Enabled=true -NumBlocks=%s -Genesis=%s -Verbose=true " +
-		"-Commit=true -Seed=%d -Period=%s -ExportParamsPath %s -ExportStatePath %s -v -timeout 24h",
-		pkgName, testName, blocks, genesis, seed, period, ExportParamsPath, ExportStatePath)
-}
-
-func makeCmd(cmdStr string) *exec.Cmd {
-	cmdSlice := strings.Split(cmdStr, " ")
-	return exec.Command(cmdSlice[0], cmdSlice[1:]...)
-}
-
-func makeFilename(seed int) string {
-	return fmt.Sprintf("app-simulation-seed-%d-date-%s", seed, time.Now().Format("01-02-2006_150405"))
-}
-
-func makeFailedSeedMsg(seed int, stdoutKey, stderrKey, bucket string, logsPushed bool) string {
-	if logsPushed {
-		return fmt.Sprintf("*Seed %s: FAILED*. *<https://%s.s3.amazonaws.com/%s|stdout>* *<https://%s.s3.amazonaws.com/%s|stderr>*\nTo reproduce run: ```\n%s\n```",
-			strconv.Itoa(seed), bucket, stdoutKey, bucket, stderrKey, buildCommand(testname, blocks, period, genesis, seed))
-	}
-	return fmt.Sprintf("*Seed %s: FAILED*. \nTo reproduce run: ```\n%s\n```\n*Log upload failed:* ```\n%s\n```",
-		strconv.Itoa(seed), buildCommand(testname, blocks, period, genesis, seed), bucket)
-}
-
-func worker(id int, seeds <-chan int) {
+func worker(id int, seeds <-chan *Seed, results chan *Seed) {
 	log.Printf("[W%d] Worker is up and running", id)
 	for seed := range seeds {
-		stdOut, stdErr, err := spawnProc(id, seed)
-		if err != nil {
-			results <- false
-			log.Printf("[W%d] Seed %d: FAILED", id, seed)
-			log.Printf("To reproduce run: %s", buildCommand(testname, blocks, period, genesis, seed))
-			if slackConfigSupplied() {
-				objKeys, bucket, err := pushLogs(logObjprefix, stdOut, stdErr)
-				if err != nil {
-					slackMessage(slackToken, slackChannel, &slackThread, makeFailedSeedMsg(seed, "", "", err.Error(), false))
-				} else {
-					slackMessage(slackToken, slackChannel, &slackThread, makeFailedSeedMsg(seed, objKeys[0], objKeys[1], bucket, true))
-				}
-			}
+		if err := spawnProcess(id, seed); err != nil {
+			seed.Failed = true
+			log.Printf("[W%d] Seed %d: FAILED", id, seed.Num)
+			log.Printf("To reproduce run: %s",
+				buildCmdString(testname, blocks, period, genesis, seed.ExportState, seed.ExportParams, seed.Num))
+
 			if exitOnFail {
 				log.Printf("\bERROR OUTPUT \n\n%s", err)
 				panic("halting simulations")
 			}
-		} else {
-			log.Printf("[W%d] Seed %d: OK", id, seed)
-			if slackConfigSupplied() {
-				_, _, err = pushLogs(logObjprefix, stdOut, stdErr)
-				if err != nil {
-					log.Printf("%v", err)
-				}
-			}
 		}
+		results <- seed
 	}
 	log.Printf("[W%d] no seeds left, shutting down", id)
 }
 
-func spawnProc(workerID int, seed int) (*os.File, *os.File, error) {
-	stderrFile, _ := os.Create(filepath.Join(tempdir, makeFilename(seed)+".stderr"))
-	stdoutFile, _ := os.Create(filepath.Join(tempdir, makeFilename(seed)+".stdout"))
-	s := buildCommand(testname, blocks, period, genesis, seed)
-	cmd := makeCmd(s)
+func spawnProcess(workerID int, seed *Seed) (err error) {
+	stderrFile, err := os.Create(seed.Stderr)
+	if err != nil {
+		if notifyGithub || notifySlack {
+			pushNotification(true, fmt.Sprintf("Host %s: ERROR: os.Create: %v", hostId, err))
+		}
+		log.Fatal(err)
+	}
+
+	stdoutFile, err := os.Create(seed.Stdout)
+	if err != nil {
+		if notifyGithub || notifySlack {
+			pushNotification(true, fmt.Sprintf("Host %s: ERROR: os.Create: %v", hostId, err))
+		}
+		log.Fatal(err)
+	}
+
+	s := buildCmdString(testname, blocks, period, genesis, seed.ExportState, seed.ExportParams, seed.Num)
+	cmd := execCmd(s)
 	cmd.Stdout = stdoutFile
 
-	var err error
 	var stderr io.ReadCloser
 	if !exitOnFail {
 		cmd.Stderr = stderrFile
 	} else {
-		stderr, err = cmd.StderrPipe()
-		if err != nil {
-			return nil, nil, err
+		if stderr, err = cmd.StderrPipe(); err != nil {
+			return err
 		}
 	}
 	sc := bufio.NewScanner(stderr)
 
-	err = cmd.Start()
-	if err != nil {
+	if err = cmd.Start(); err != nil {
 		log.Printf("couldn't start %q", s)
-		return nil, nil, err
+		return err
 	}
 	log.Printf("[W%d] Spawned simulation with pid %d [seed=%d stdout=%s stderr=%s]",
-		workerID, cmd.Process.Pid, seed, stdoutFile.Name(), stderrFile.Name())
+		workerID, cmd.Process.Pid, seed.Num, seed.Stdout, seed.Stderr)
 	pushProcess(cmd.Process)
 	defer popProcess(cmd.Process)
 
-	err = cmd.Wait()
-	if err != nil {
+	if err = cmd.Wait(); err != nil {
 		fmt.Printf("%s\n", err)
 	}
+
 	if exitOnFail {
 		for sc.Scan() {
 			fmt.Printf("stderr: %s\n", sc.Text())
 		}
 	}
-	return stdoutFile, stderrFile, err
+	return err
 }
 
 func pushProcess(proc *os.Process) {
@@ -339,14 +325,25 @@ func checkSignal(proc *os.Process, signal syscall.Signal) {
 	}
 }
 
-func makeSeedList(seeds string) ([]int, error) {
+func buildCmdString(testName, blocks, period, genesis, exportStatePath, exportParamsPath string, seed int) string {
+	return fmt.Sprintf("go test %s -run %s -Enabled=true -NumBlocks=%s -Genesis=%s -Verbose=true "+
+		"-Commit=true -Seed=%d -Period=%s -ExportParamsPath %s -ExportStatePath %s -v -timeout 24h",
+		pkgName, testName, blocks, genesis, seed, period, exportParamsPath, exportStatePath)
+}
+
+func execCmd(cmdStr string) *exec.Cmd {
+	cmdSlice := strings.Split(cmdStr, " ")
+	return exec.Command(cmdSlice[0], cmdSlice[1:]...)
+}
+
+func buildSeedList(seeds string) ([]int, error) {
 	strSeedsLst := strings.Split(seeds, ",")
 	if len(strSeedsLst) == 0 {
 		return nil, fmt.Errorf("seeds was empty")
 	}
 	intSeeds := make([]int, len(strSeedsLst))
-	for i, seedstr := range strSeedsLst {
-		intSeed, err := strconv.Atoi(strings.TrimSpace(seedstr))
+	for i, seedStr := range strSeedsLst {
+		intSeed, err := strconv.Atoi(strings.TrimSpace(seedStr))
 		if err != nil {
 			return nil, fmt.Errorf("cannot convert seed to integer: %v", err)
 		}
@@ -355,4 +352,6 @@ func makeSeedList(seeds string) ([]int, error) {
 	return intSeeds, nil
 }
 
-func slackConfigSupplied() bool { return slackConfig != "" }
+func buildLogFileName(seed int) string {
+	return fmt.Sprintf("app-simulation-seed-%d-date-%s", seed, time.Now().Format("01-02-2006_150405"))
+}

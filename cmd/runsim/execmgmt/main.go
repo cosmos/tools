@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,22 +14,187 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/nlopes/slack"
+	"github.com/cosmos/tools/lib/runsimgh"
+	"github.com/cosmos/tools/lib/runsimslack"
 )
 
-const instanceShutdownBehaviour = "terminate"
-const numSeeds = 384
+const (
+	// EC2 config values
+	awsRegion          = "us-east-1"
+	ec2InstanceType    = "c4.8xlarge"
+	ec2KeyPair         = "wallet-nodes"
+	ec2InstanceProfile = "gaia-simulation"
+	gaiaAmiIdPrefix    = "gaia-sim-"
 
-// If the number of jobs is < the number of seeds, simulation will crash
-var numJobs = numSeeds
-var err error
+	// simulation config values
+	genesisFilePath = "/home/ec2-user/genesis.json"
 
-func makeSeedLists() map[int]string {
-	lists := make(map[int]string)
+	// security token ID
+	ghAppTokenID    = "github-sim-app-key"
+	slackAppTokenID = "slack-app-key"
+)
+
+var (
+	notifyOnly bool
+
+	// simulation parameters
+	blocks, period, seeds, sdkGitRev string
+	genesis                          bool
+
+	// ec2 instance properties
+	shutdownBehavior string
+
+	// integration variables and structs
+	githubParam, slackParam string
+	github                  = new(runsimgh.Integration)
+	slack                   = new(runsimslack.Integration)
+
+	// CircleCI environment variables
+	buildUrl, buildNum string
+)
+
+func init() {
+	flag.BoolVar(&genesis, "Genesis", false, "Use genesis file in simulation")
+	flag.BoolVar(&notifyOnly, "Notify", false, "Send notification and exit")
+
+	blocks = os.Getenv("BLOCKS")
+	period = os.Getenv("PERIOD")
+	seeds = os.Getenv("SEEDS")
+
+	// Not using os.LookupEnv on purpose to reduce the number of variables.
+	githubParam = os.Getenv("GITHUB")
+	slackParam = os.Getenv("SLACK")
+
+	shutdownBehavior = os.Getenv("SHUTDOWN_BEHAVIOR")
+	buildUrl = os.Getenv("CIRCLE_BUILD_URL")
+	buildNum = os.Getenv("CIRCLE_BUILD_NUM")
+	sdkGitRev = os.Getenv("GAIA_COMMIT_HASH")
+}
+
+func main() {
+	flag.Parse()
+
+	if githubParam != "" {
+		if err := github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
+			log.Fatalf("ERROR: github.ConfigFromState: %v", err)
+		}
+		if err := github.SetActiveCheckRun(); err != nil || github.ActiveCheckRun == nil {
+			_ = github.CreateNewCheckRun()
+			// If there was no active check run, lambda function would have failed before starting the simulation.
+			log.Fatalf("ERROR: github.SetActiveCheckRun: %v", err)
+		}
+	} else if slackParam != "" {
+		err := slack.ConfigFromState(awsRegion, slackAppTokenID)
+		if err != nil {
+			log.Fatalf("ERROR: slack.ConfigFromState: %v", err)
+		}
+	} else {
+		log.Fatalf("ERROR: missing integration config")
+	}
+
+	// Update github check or send slack message to notify that the image build has started.
+	if notifyOnly {
+		if slackParam != "" {
+			pushNotification(false, buildSlackMessage())
+			os.Exit(0)
+		}
+		pushNotification(false, buildCheckSummary())
+		os.Exit(0)
+	}
+
+	sessionEC2 := ec2.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
+	amiId, err := getAmiId(sdkGitRev, sessionEC2)
+	if err != nil {
+		log.Fatalf("ERROR: getAmiId: %v", err)
+	}
+	if amiId == "" {
+		log.Fatalf("ERROR: simulation AMI not found")
+	}
+
+	seedLists := makeSeedLists(seeds)
+	instanceIds := make([]*string, len(seedLists))
+	msgQueue := make([]int, len(seedLists))
+	for index := range seedLists {
+		// Here be bash dragons. Modify with extreme caution. Ensure you add adequate line endings.
+		// User data is a shell script that will be run during EC2 instance startup
+		var userData strings.Builder
+		userData.WriteString("#!/bin/bash \n")
+		userData.WriteString("cd /home/ec2-user/go/src/github.com/cosmos/cosmos-sdk || exit 1\n")
+
+		// Setup environment variables for golang.
+		// Script can be found here: https://github.com/tendermint/images/blob/master/ami-gaia-sim/set_env.sh
+		userData.WriteString("source /etc/profile.d/set_env.sh\n")
+		userData.WriteString(buildRunsimCommand(seedLists[index], strconv.Itoa(index), buildNum))
+		userData.WriteString("shutdown -h now")
+
+		// Separate variable to make this code actually readable
+		input := &ec2.RunInstancesInput{
+			InstanceInitiatedShutdownBehavior: aws.String(shutdownBehavior),
+			IamInstanceProfile:                &ec2.IamInstanceProfileSpecification{Name: aws.String(ec2InstanceProfile)},
+			TagSpecifications: []*ec2.TagSpecification{{
+				ResourceType: aws.String("instance"),
+				Tags: []*ec2.Tag{{
+					Key:   aws.String("SimID"),
+					Value: aws.String(buildNum)}}},
+			},
+
+			InstanceType: aws.String(ec2InstanceType),
+			ImageId:      aws.String(amiId),
+			KeyName:      aws.String(ec2KeyPair),
+			MaxCount:     aws.Int64(1),
+			MinCount:     aws.Int64(1),
+			UserData:     aws.String(base64.StdEncoding.EncodeToString([]byte(userData.String()))),
+		}
+
+		ec2Reservation, err := sessionEC2.RunInstances(input)
+		if err != nil {
+			summary := fmt.Sprintf("ERROR: RunInstances: %v", err)
+
+			// Checking aws error code to see if we have reached the EC2 limit for this instance type
+			// Crashing out of the program is not desirable. We can run simulation with a lower number of seeds
+			// TODO: make this more robust. If we reach the instance limit, switch to a different instance type/aws region
+			if awsErr, ok := err.(awserr.Error); ok {
+				if awsErr.Code() == "InstanceLimitExceeded" {
+					// If no instances have been started yet, mark the simulation as failed
+					if index == 1 {
+						pushNotification(true, summary)
+						os.Exit(1)
+					}
+					// Continue the simulation with the seeds that have already started
+					break
+				}
+			}
+			// If it's not a limit error, crash out.
+			// Terminate any instances that are already running, otherwise the github integration will possibly report
+			// incorrect results.
+			if index > 1 {
+				terminateInstances(sessionEC2, instanceIds)
+			}
+			pushNotification(true, summary)
+			os.Exit(1)
+		}
+		// Saving these just in case we need to terminate them prematurely
+		instanceIds[index] = ec2Reservation.Instances[0].InstanceId
+		msgQueue[index] = index
+	}
+
+	if len(msgQueue) > 1 {
+		sendSqsMsg(msgQueue)
+	}
+}
+
+func makeSeedLists(seeds string) map[int]string {
 	var str strings.Builder
+	lists := make(map[int]string)
+	seedsInt, err := strconv.Atoi(seeds)
+	if err != nil {
+		log.Fatalf("ERROR: seed list contains invalid values")
+	}
+
 	index := 0
-	for i := 0; i <= numSeeds; i++ {
-		// Each machine has 36 cores. Want to allocate one core per seed
+	for i := 0; i <= seedsInt; i++ {
+		// TODO: make this a configurable value. Requires some more logic around AWS instance startup
+		// Each machine has 36 cores. Allocate one core per seed
 		if i != 0 && math.Mod(float64(i), 35) == 0 {
 			lists[index] = strings.TrimRight(str.String(), ",")
 			str.Reset()
@@ -44,146 +208,75 @@ func makeSeedLists() map[int]string {
 	return lists
 }
 
-func getAmiId(gitRevision string, svc *ec2.EC2) (string, error) {
+func getAmiId(gitRevision string, svc *ec2.EC2) (amiID string, err error) {
 	var imageID *ec2.DescribeImagesOutput
 	input := &ec2.DescribeImagesInput{
 		Filters: []*ec2.Filter{
 			{
-				Name: aws.String("name"),
-				Values: []*string{
-					aws.String("gaia-sim-" + gitRevision),
-				},
-			},
-		},
+				Name:   aws.String("name"),
+				Values: []*string{aws.String(fmt.Sprintf(gaiaAmiIdPrefix+"%s", gitRevision))},
+			}},
 	}
 	if imageID, err = svc.DescribeImages(input); err != nil {
-		return "", err
+		return
 	}
-	return *imageID.Images[0].ImageId, nil
+	if len(imageID.Images) > 0 {
+		amiID = *imageID.Images[0].ImageId
+	}
+	return
 }
 
-func buildCommand(jobs int, logObjKey, seeds, token, channel, timeStamp, blocks, period string, genesis bool) string {
-	if genesis {
-		return fmt.Sprintf("runsim -log \"%s\" -j %d -seeds \"%s\" -g /home/ec2-user/genesis.json "+
-			"-slack \"%s,%s,%s\" github.com/cosmos/cosmos-sdk/simapp %s %s TestFullAppSimulation;",
-			logObjKey, jobs, seeds, token, channel, timeStamp, blocks, period)
+func terminateInstances(svc *ec2.EC2, instanceIds []*string) {
+	if _, err := svc.TerminateInstances(&ec2.TerminateInstancesInput{
+		InstanceIds: instanceIds,
+	}); err != nil {
+		log.Printf("ERROR: TerminateInstances: %v", err)
 	}
-	return fmt.Sprintf("runsim -log \"%s\" -j %d -seeds \"%s\" -slack \"%s,%s,%s\" github.com/cosmos/cosmos-sdk/simapp %s %s TestFullAppSimulation;",
-		logObjKey, jobs, seeds, token, channel, timeStamp, blocks, period)
 }
 
-func slackMessage(token string, channel string, threadTS *string, message string) (string, error) {
-	client := slack.New(token)
-	if threadTS != nil {
-		_, respTS, err := client.PostMessage(channel, slack.MsgOptionText(message, false), slack.MsgOptionTS(*threadTS))
-		if err != nil {
-			return "", err
+func pushNotification(failed bool, message string) {
+	// If the simulation failed, and pushing the notification also fails after this, need someplace to record
+	// the simulation failure message.
+	if failed {
+		log.Print(message)
+	}
+	if slackParam != "" {
+		if err := slack.PostMessage(message); err != nil {
+			log.Fatalf("ERROR: slack.PostMessage: %v", err)
 		}
-		return respTS, nil
+	} else if failed {
+		if err := github.ConcludeCheckRun(&message, aws.String("failure")); err != nil {
+			log.Fatalf("ERROR: github.ConcludeCheckRun: %v", err)
+		}
 	} else {
-		_, respTS, err := client.PostMessage(channel, slack.MsgOptionText(message, false))
-		if err != nil {
-			return "", err
+		if err := github.UpdateCheckRunStatus(aws.String("in_progress"), &message); err != nil {
+			log.Fatalf("ERROR: github.UpdateCheckRunStatus: %v", err)
 		}
-		return respTS, nil
 	}
 }
 
-func main() {
-	var (
-		amiID          string
-		skackChannelId string
-		slackToken     string
-		numBlocks      string
-		simPeriod      string
-		gitRevision    string
-		messageTS      string
-		logObjPrefix   string
-		msgQueueIndex  []int
-		notifyOnly     bool
-		genesis        bool
-		sessionEC2     = ec2.New(session.Must(session.NewSession(&aws.Config{
-			Region: aws.String("us-east-1"),
-		})))
-		ec2Instances *ec2.Reservation
-	)
+func buildRunsimCommand(seeds, hostId, simId string) string {
+	logObjKey := fmt.Sprintf("sim-id-%s", os.Getenv("CIRCLE_BUILD_NUM"))
+	integration := "-Github"
+	if slackParam != "" {
+		integration = "-Slack"
+	}
+	if genesis {
+		return fmt.Sprintf("runsim -SimId %s -HostId %s -LogObjPrefix %s -SimAppPkg ./simapp %s -Seeds \"%s\" -Genesis %s %s %s TestFullAppSimulation;",
+			simId, hostId, logObjKey, integration, seeds, genesisFilePath, blocks, period)
+	}
+	log.Printf("runsim -SimId %s -HostId %s -LogObjPrefix %s -SimAppPkg ./simapp %s -Seeds \"%s\" %s %s TestFullAppSimulation;",
+		simId, hostId, logObjKey, integration, seeds, blocks, period)
 
-	flag.StringVar(&slackToken, "s", "", "Slack token")
-	flag.StringVar(&skackChannelId, "c", "", "Slack channel ID")
-	flag.StringVar(&numBlocks, "b", "", "Number of blocks to simulate")
-	flag.StringVar(&simPeriod, "p", "", "Simulation invariant check period")
-	flag.StringVar(&gitRevision, "g", "", "The git revision on which the simulation is run")
-	flag.BoolVar(&notifyOnly, "notify", false, "Send notification and exit")
-	flag.BoolVar(&genesis, "gen", false, "Use genesis file in simulation")
-	flag.Usage = func() {
-		_, _ = fmt.Fprintf(flag.CommandLine.Output(),
-			`Usage: %s [-notify] [-gen] [-s slacktoken] [-c skackChannelId] [-b numblocks] [-p simperiod] [-g gitrevision]`, filepath.Base(os.Args[0]))
-	}
-	flag.Parse()
+	return fmt.Sprintf("runsim -SimId %s -HostId %s -LogObjPrefix %s -SimAppPkg ./simapp %s -Seeds \"%s\" %s %s TestFullAppSimulation;",
+		simId, hostId, logObjKey, integration, seeds, blocks, period)
+}
 
-	if notifyOnly {
-		messageTS, err = slackMessage(slackToken, skackChannelId, nil,
-			fmt.Sprintf("*Starting simulation #%s.* SDK hash/tag/branch: `%s`. <%s|Circle build url>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%d`",
-				os.Getenv("CIRCLE_BUILD_NUM"), gitRevision, os.Getenv("CIRCLE_BUILD_URL"), numBlocks, simPeriod, numSeeds))
-		if err != nil {
-			log.Fatalf("ERROR: sending slack message: %v", err)
-		}
-		// DO NOT REMOVE. Using this output to set an environment variable
-		// Env variable will be used by subsequent runs of this program
-		fmt.Println(messageTS)
-		os.Exit(0)
-	}
+func buildSlackMessage() string {
+	return fmt.Sprintf("*Starting simulation #%s.* SDK hash/tag/branch: `%s`. <%s|Circle build url>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
+		buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
+}
 
-	messageTS = os.Getenv("MSGTS")
-	if _, err = slackMessage(slackToken, skackChannelId, &messageTS, "Spinning up simulation environments!"); err != nil {
-		log.Fatalf("ERROR: sending slack message: %v", err)
-	}
-	if amiID, err = getAmiId(gitRevision, sessionEC2); err != nil {
-		log.Fatal(err.Error())
-	}
-
-	logObjPrefix = fmt.Sprintf("sim-id-%s", os.Getenv("CIRCLE_BUILD_NUM"))
-	seedLists := makeSeedLists()
-	for index := range seedLists {
-		// Dragons
-		var userData strings.Builder
-		userData.WriteString("#!/bin/bash \n")
-		userData.WriteString("cd /home/ec2-user/go/src/github.com/cosmos/cosmos-sdk \n")
-		userData.WriteString("source /etc/profile.d/set_env.sh \n")
-		userData.WriteString(buildCommand(numJobs, logObjPrefix, seedLists[index], slackToken, skackChannelId, messageTS, numBlocks, simPeriod, genesis))
-		userData.WriteString("shutdown -h now")
-
-		config := &ec2.RunInstancesInput{
-			InstanceInitiatedShutdownBehavior: aws.String(instanceShutdownBehaviour),
-			InstanceType:                      aws.String("c4.8xlarge"),
-			ImageId:                           aws.String(amiID),
-			KeyName:                           aws.String("wallet-nodes"),
-			MaxCount:                          aws.Int64(1),
-			MinCount:                          aws.Int64(1),
-			UserData:                          aws.String(base64.StdEncoding.EncodeToString([]byte(userData.String()))),
-			IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
-				Name: aws.String("gaia-simulation"),
-			}}
-		if ec2Instances, err = sessionEC2.RunInstances(config); err != nil {
-			// Checking aws error code to see if we have reached the EC2 instance limit for this instance type
-			// Crashing out of the program is not desirable. We can run simulation with a lower number of seeds
-			if awsErr, ok := err.(awserr.Error); ok {
-				if awsErr.Code() == "InstanceLimitExceeded" {
-					log.Println(awsErr.Error())
-					break
-				} else {
-					log.Fatal(awsErr.Error())
-				}
-			} else {
-				log.Fatal(err.Error())
-			}
-		}
-		msgQueueIndex = append(msgQueueIndex, index)
-		for i := range ec2Instances.Instances {
-			log.Println(*ec2Instances.Instances[i].InstanceId)
-		}
-	}
-	if len(msgQueueIndex) > 1 {
-		sendSqsMsg(msgQueueIndex)
-	}
+func buildCheckSummary() string {
+	return fmt.Sprintf("Image build: %s\n", buildUrl)
 }
