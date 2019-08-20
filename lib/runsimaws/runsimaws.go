@@ -65,6 +65,14 @@ func (table *DdbTable) UpdateState(key string, data interface{}) (err error) {
 	return
 }
 
+func (table *DdbTable) DeleteState(key string) (err error) {
+	_, err = table.svc.DeleteItem(&ddb.DeleteItemInput{
+		Key:       map[string]*ddb.AttributeValue{*table.PrimaryKey: {S: aws.String(key)}},
+		TableName: table.Name,
+	})
+	return
+}
+
 // SSM functions used by the runsim application
 //
 
