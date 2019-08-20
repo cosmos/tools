@@ -2,27 +2,30 @@ package runsimslack
 
 import (
 	"errors"
-
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/nlopes/slack"
 )
 
+const primaryKey = "IntegrationType"
+const tableName = "SimulationState"
+
 type Integration struct {
 	Client    *slack.Client
+	State     *runsimaws.DdbTable
 	MessageTS *string
 	ChannelID *string
 }
 
 func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (err error) {
-	ddbTable := new(runsimaws.DdbTable)
+	Slack.State = new(runsimaws.DdbTable)
+	Slack.State.Config(awsRegion, primaryKey, tableName)
 	ssm := new(runsimaws.Ssm)
-	ddbTable.Config(awsRegion, "IntegrationType", "SimulationState")
 	ssm.Config(awsRegion)
 
-	err = ddbTable.GetState("Slack", Slack)
-	if err != nil {
+	if err = Slack.State.GetState("Slack", Slack); err != nil {
 		return err
 	}
+
 	token, err := ssm.GetParameter(slackAppTokenID)
 	if err != nil {
 		return err
@@ -38,7 +41,17 @@ func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (er
 	return nil
 }
 
-func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, slackAppTokenID string) (err error){
+func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, slackAppTokenID string) (err error) {
+	Slack.MessageTS = &messageTS
+	Slack.ChannelID = &channelID
+
+	Slack.State = new(runsimaws.DdbTable)
+	Slack.State.Config(awsRegion, primaryKey, tableName)
+
+	if err = Slack.State.PutState(Slack); err != nil {
+		return
+	}
+
 	ssm := new(runsimaws.Ssm)
 	ssm.Config(awsRegion)
 
@@ -54,4 +67,8 @@ func (Slack *Integration) PostMessage(message string) (err error) {
 		return
 	}
 	return
+}
+
+func (Slack *Integration) DeleteState() (err error) {
+	return Slack.State.DeleteState("Slack")
 }

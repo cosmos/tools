@@ -13,10 +13,14 @@ import (
 	"github.com/google/go-github/v27/github"
 )
 
+const primaryKey = "IntegrationType"
+const tableName = "SimulationState"
+
 type Integration struct {
 	Client         *github.Client
 	PR             *github.PullRequest
 	ActiveCheckRun *github.CheckRun
+	State          *runsimaws.DdbTable
 	CheckRunName   *string
 	InstallationID *string
 	IntegrationID  *string
@@ -28,10 +32,10 @@ type Integration struct {
 // Retrieve simulation state data from DynamoDB
 // Use the state data to configure the github api client and assign value to the integration fields
 func (gh *Integration) ConfigFromState(awsRegion, ghAccessTokenID string) (err error) {
-	ddTable := new(runsimaws.DdbTable)
-	ddTable.Config(awsRegion, "IntegrationType", "SimulationState")
+	gh.State = new(runsimaws.DdbTable)
+	gh.State.Config(awsRegion, primaryKey, tableName)
 
-	if err = ddTable.GetState("GitHub", gh); err != nil {
+	if err = gh.State.GetState("GitHub", gh); err != nil {
 		return
 	}
 
@@ -67,6 +71,12 @@ func (gh *Integration) ConfigFromScratch(awsRegion, privateKeyID, repoOwner, rep
 	gh.InstallationID = &installationID
 	gh.IntegrationID = &integrationID
 	gh.PrNum = &prNum
+	gh.State = new(runsimaws.DdbTable)
+	gh.State.Config(awsRegion, primaryKey, tableName)
+
+	if err = gh.State.PutState(gh); err != nil {
+		return
+	}
 
 	ssm := new(runsimaws.Ssm)
 	ssm.Config(awsRegion)
@@ -165,6 +175,10 @@ func (gh *Integration) UpdateCheckRunStatus(status, summary *string) (err error)
 		gh.ActiveCheckRun.GetID(), opt)
 
 	return
+}
+
+func (gh *Integration) DeleteState() (err error) {
+	return gh.State.DeleteState("GitHub")
 }
 
 func (gh *Integration) GetOwner() string {
