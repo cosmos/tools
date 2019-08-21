@@ -2,6 +2,7 @@ package runsimslack
 
 import (
 	"errors"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/nlopes/slack"
 )
@@ -61,10 +62,14 @@ func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, sla
 }
 
 func (Slack *Integration) PostMessage(message string) (err error) {
-	_, _, err = Slack.Client.PostMessage(*Slack.ChannelID, slack.MsgOptionTS(*Slack.MessageTS),
+	_, messageTS, err := Slack.Client.PostMessage(*Slack.ChannelID, slack.MsgOptionTS(*Slack.MessageTS),
 		slack.MsgOptionText(message, false))
 	if err != nil {
-		return
+		return err
+	}
+
+	if Slack.MessageTS == nil {
+		Slack.MessageTS = aws.String(messageTS)
 	}
 	return
 }

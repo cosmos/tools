@@ -2,8 +2,8 @@ github.com/aws/aws-sdk-go v1.23.2 h1:QSdnxlC29v6b2+C6mkriHhElh02ZlsRBoPX15SOZ6jU
 github.com/aws/aws-sdk-go v1.23.2/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/bradleyfalzon/ghinstallation v0.1.2 h1:9fdqVadlvEX/EUts5/aIGvx2ujKnGNIMcuCuUrM6s6Q=
 github.com/bradleyfalzon/ghinstallation v0.1.2/go.mod h1:VQsLlCoNa54/CNXcc2DuCfNZrZxqQcyPeqKUugF/2h8=
-github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820223539-633a9009645e h1:KFssnD75TZuZFnyMeZdAtS93rgcy2RE/mOgPqJRiePw=
-github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820223539-633a9009645e/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
+github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820231237-3eb40b7e2305 h1:HV+Dz/RxzYwwLdtGp83ZVzZXdzAIXcBxZMVwED1xa7I=
+github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820231237-3eb40b7e2305/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible h1:7qlOGliEKZXTDg6OTjfoBKDXWrumCAMpl/TFQ4/5kLM=
