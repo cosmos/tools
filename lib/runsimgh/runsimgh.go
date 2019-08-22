@@ -151,7 +151,7 @@ func (gh *Integration) ConcludeCheckRun(summary *string, failed bool) (err error
 		opt.Conclusion = aws.String("success")
 	}
 
-	_, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
 		gh.ActiveCheckRun.GetID(), opt)
 
 	return
@@ -171,7 +171,7 @@ func (gh *Integration) UpdateCheckRunStatus(status, summary *string) (err error)
 		}
 	}
 
-	_, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
 		gh.ActiveCheckRun.GetID(), opt)
 
 	return
