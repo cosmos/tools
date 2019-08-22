@@ -1,7 +1,12 @@
 package runsimslack
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/nlopes/slack"
@@ -11,24 +16,17 @@ const primaryKey = "IntegrationType"
 const tableName = "SimulationState"
 
 type Integration struct {
-	Client    *slack.Client
-	State     *runsimaws.DdbTable
-	MessageTS *string
-	ChannelID *string
+	Client          *slack.Client
+	State           *runsimaws.DdbTable
+	IntegrationType *string
+	MessageTS       *string
+	ChannelID       *string
 }
 
 func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (err error) {
 	Slack.State = new(runsimaws.DdbTable)
 	Slack.State.Config(awsRegion, primaryKey, tableName)
-	ssm := new(runsimaws.Ssm)
-	ssm.Config(awsRegion)
-
 	if err = Slack.State.GetState("Slack", Slack); err != nil {
-		return err
-	}
-
-	token, err := ssm.GetParameter(slackAppTokenID)
-	if err != nil {
 		return err
 	}
 
@@ -38,14 +36,22 @@ func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (er
 	if *Slack.ChannelID == "" {
 		return errors.New("ErrorMissingAttribute: SlackChannel")
 	}
+
+	ssm := new(runsimaws.Ssm)
+	ssm.Config(awsRegion)
+	token, err := ssm.GetParameter(slackAppTokenID)
+	if err != nil {
+		return err
+	}
+
 	Slack.Client = slack.New(token)
-	return nil
+	return
 }
 
-func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, slackAppTokenID string) (err error) {
-	Slack.MessageTS = &messageTS
-	Slack.ChannelID = &channelID
-
+func (Slack *Integration) ConfigFromScratch(awsRegion, channelId, slackAppTokenID string) (err error) {
+	Slack.IntegrationType = aws.String("Slack")
+	Slack.MessageTS = aws.String("")
+	Slack.ChannelID = &channelId
 	Slack.State = new(runsimaws.DdbTable)
 	Slack.State.Config(awsRegion, primaryKey, tableName)
 
@@ -61,6 +67,30 @@ func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, sla
 	return
 }
 
+func (Slack *Integration) PushSlackCmdReply(message, responseUrl string) (err error) {
+	payload, err := json.Marshal(struct {
+		Text string `json:"text"`
+	}{Text: message})
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequest("POST", responseUrl, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+
+	request.Header.Set("Content-Type", "application/json;charset=UTF-8")
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+
+	err = response.Body.Close()
+	return
+}
+
 func (Slack *Integration) PostMessage(message string) (err error) {
 	_, messageTS, err := Slack.Client.PostMessage(*Slack.ChannelID, slack.MsgOptionTS(*Slack.MessageTS),
 		slack.MsgOptionText(message, false))
@@ -68,7 +98,7 @@ func (Slack *Integration) PostMessage(message string) (err error) {
 		return err
 	}
 
-	if Slack.MessageTS == nil {
+	if *Slack.MessageTS == "" {
 		Slack.MessageTS = aws.String(messageTS)
 	}
 	return

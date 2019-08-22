@@ -17,16 +17,17 @@ const primaryKey = "IntegrationType"
 const tableName = "SimulationState"
 
 type Integration struct {
-	Client         *github.Client
-	PR             *github.PullRequest
-	ActiveCheckRun *github.CheckRun
-	State          *runsimaws.DdbTable
-	CheckRunName   *string
-	InstallationID *string
-	IntegrationID  *string
-	RepoOwner      *string
-	RepoName       *string
-	PrNum          *string
+	Client          *github.Client
+	PR              *github.PullRequest
+	ActiveCheckRun  *github.CheckRun
+	State           *runsimaws.DdbTable
+	IntegrationType *string
+	CheckRunName    *string
+	InstallationID  *string
+	IntegrationID   *string
+	RepoOwner       *string
+	RepoName        *string
+	PrNum           *string
 }
 
 // Retrieve simulation state data from DynamoDB
@@ -71,6 +72,7 @@ func (gh *Integration) ConfigFromScratch(awsRegion, privateKeyID, repoOwner, rep
 	gh.InstallationID = &installationID
 	gh.IntegrationID = &integrationID
 	gh.PrNum = &prNum
+	gh.IntegrationType = aws.String("GitHub")
 	gh.State = new(runsimaws.DdbTable)
 	gh.State.Config(awsRegion, primaryKey, tableName)
 
@@ -132,26 +134,31 @@ func (gh *Integration) SetActiveCheckRun() (err error) {
 	return
 }
 
-func (gh *Integration) ConcludeCheckRun(summary *string, failed bool) (err error) {
+// Retrieve a new copy of the active check run. New copy contains any fields which have been updated since
+// the active check run has been set
+func (gh *Integration) UpdateActiveCheckRun() (err error) {
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.GetCheckRun(context.Background(),
+		gh.GetOwner(), gh.GetRepo(), gh.ActiveCheckRun.GetID())
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (gh *Integration) ConcludeCheckRun(summary, conclusion *string) (err error) {
 	opt := github.UpdateCheckRunOptions{
-		//		Name:        gh.ActiveCheckRun.GetName(),
 		Name:        gh.ActiveCheckRun.GetName(),
 		Status:      aws.String("completed"),
 		CompletedAt: &github.Timestamp{Time: time.Now()},
-	}
-	if summary != nil {
-		opt.Output = &github.CheckRunOutput{
+		Conclusion:  conclusion,
+
+		Output: &github.CheckRunOutput{
 			Title:   aws.String("Details"),
 			Summary: summary,
-		}
-	}
-	if failed {
-		opt.Conclusion = aws.String("failure")
-	} else {
-		opt.Conclusion = aws.String("success")
+		},
 	}
 
-	_, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
 		gh.ActiveCheckRun.GetID(), opt)
 
 	return
@@ -171,7 +178,7 @@ func (gh *Integration) UpdateCheckRunStatus(status, summary *string) (err error)
 		}
 	}
 
-	_, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
 		gh.ActiveCheckRun.GetID(), opt)
 
 	return

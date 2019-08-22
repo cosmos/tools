@@ -10,19 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
-const (
-	awsRegion       = "us-east-1"
-	queueNamePrefix = "gaia-sim-"
-)
-
-var (
-	sessionSQS = sqs.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(awsRegion),
-	})))
-)
+var sessionSQS = sqs.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
 
 func sendBatch(batchRequestEntries []*sqs.SendMessageBatchRequestEntry, queues *sqs.ListQueuesOutput) {
-	if _, err = sessionSQS.SendMessageBatch(&sqs.SendMessageBatchInput{
+	if _, err := sessionSQS.SendMessageBatch(&sqs.SendMessageBatchInput{
 		Entries:  batchRequestEntries,
 		QueueUrl: queues.QueueUrls[0],
 	}); err != nil {
@@ -41,20 +32,20 @@ func removeEmpties(batch []*sqs.SendMessageBatchRequestEntry) []*sqs.SendMessage
 	return newBatch
 }
 
-func sendSqsMsg(instanceIndex []int) {
-	var (
-		maxMessages         = 0
-		batchRequestEntries = make([]*sqs.SendMessageBatchRequestEntry, 10)
-		queues              *sqs.ListQueuesOutput
+func sendSqsMsg(instanceIndex []int, queueNamePrefix string) {
+	queues, err := sessionSQS.ListQueues(
+		&sqs.ListQueuesInput{
+			QueueNamePrefix: aws.String(queueNamePrefix),
+		},
 	)
 
-	if queues, err = sessionSQS.ListQueues(&sqs.ListQueuesInput{
-		QueueNamePrefix: aws.String(queueNamePrefix),
-	}); err != nil {
-		log.Fatal(err.Error())
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
 
 	sort.Ints(instanceIndex)
+	maxMessages := 0
+	batchRequestEntries := make([]*sqs.SendMessageBatchRequestEntry, 10)
 	for index := range instanceIndex {
 		batchRequestEntries[maxMessages] = &sqs.SendMessageBatchRequestEntry{
 			Id:          aws.String(strconv.Itoa(index)),

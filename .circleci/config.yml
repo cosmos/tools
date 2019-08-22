@@ -17,8 +17,9 @@ jobs:
           command: |
             go build ./cmd/clog
             go build ./cmd/runsim
-            go build ./cmd/runsim/integrations/slack
-            go build ./cmd/runsim/execmgmt
+            go build ./cmd/slack
+            go build ./cmd/github
+            go build ./cmd/execmgmt
 
 workflows:
   version: 2
