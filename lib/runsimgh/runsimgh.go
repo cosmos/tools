@@ -132,23 +132,17 @@ func (gh *Integration) SetActiveCheckRun() (err error) {
 	return
 }
 
-func (gh *Integration) ConcludeCheckRun(summary *string, failed bool) (err error) {
+func (gh *Integration) ConcludeCheckRun(summary, conclusion *string) (err error) {
 	opt := github.UpdateCheckRunOptions{
-		//		Name:        gh.ActiveCheckRun.GetName(),
 		Name:        gh.ActiveCheckRun.GetName(),
 		Status:      aws.String("completed"),
 		CompletedAt: &github.Timestamp{Time: time.Now()},
-	}
-	if summary != nil {
-		opt.Output = &github.CheckRunOutput{
+		Conclusion:  conclusion,
+
+		Output: &github.CheckRunOutput{
 			Title:   aws.String("Details"),
 			Summary: summary,
-		}
-	}
-	if failed {
-		opt.Conclusion = aws.String("failure")
-	} else {
-		opt.Conclusion = aws.String("success")
+		},
 	}
 
 	gh.ActiveCheckRun, _, err = gh.Client.Checks.UpdateCheckRun(context.Background(), gh.GetOwner(), gh.GetRepo(),
