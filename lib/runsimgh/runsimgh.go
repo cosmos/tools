@@ -132,6 +132,17 @@ func (gh *Integration) SetActiveCheckRun() (err error) {
 	return
 }
 
+// Retrieve a new copy of the active check run. New copy contains any fields which have been updated since
+// the active check run has been set
+func (gh *Integration) UpdateActiveCheckRun() (err error) {
+	gh.ActiveCheckRun, _, err = gh.Client.Checks.GetCheckRun(context.Background(),
+		gh.GetOwner(), gh.GetRepo(), gh.ActiveCheckRun.GetID())
+	if err != nil {
+		return
+	}
+	return
+}
+
 func (gh *Integration) ConcludeCheckRun(summary, conclusion *string) (err error) {
 	opt := github.UpdateCheckRunOptions{
 		Name:        gh.ActiveCheckRun.GetName(),
