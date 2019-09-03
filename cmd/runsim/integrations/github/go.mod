@@ -3,9 +3,8 @@ module github.com/cosmos/tools/cmd/runsim/integrations/github
 go 1.12
 
 require (
-	github.com/aws/aws-lambda-go v1.12.0
-	github.com/aws/aws-sdk-go v1.21.7
-	github.com/bradleyfalzon/ghinstallation v0.1.2
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
-	github.com/google/go-github/v27 v27.0.4
+	github.com/aws/aws-lambda-go v1.13.1
+	github.com/aws/aws-sdk-go v1.23.14
+	github.com/cosmos/tools/lib/runsimaws v0.0.0-20190904044037-7c6ef3f36127
+	github.com/cosmos/tools/lib/runsimgh v0.0.0-20190904044037-7c6ef3f36127
 )

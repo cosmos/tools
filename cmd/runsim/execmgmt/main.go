@@ -24,7 +24,7 @@ const (
 	ec2InstanceType    = "c4.8xlarge"
 	ec2KeyPair         = "wallet-nodes"
 	ec2InstanceProfile = "gaia-simulation"
-	gaiaAmiIdPrefix    = "gaia-sim-"
+	gaiaAmiIdPrefix    = "gaia-sim"
 
 	// simulation config values
 	genesisFilePath = "/home/ec2-user/genesis.json"
@@ -32,6 +32,9 @@ const (
 	// security token ID
 	ghAppTokenID    = "github-sim-app-key"
 	slackAppTokenID = "slack-app-key"
+
+	slackIntegrationType = "slack"
+	ghIntegrationType    = "github"
 )
 
 var (
@@ -45,9 +48,9 @@ var (
 	shutdownBehavior string
 
 	// integration variables and structs
-	githubParam, slackParam string
-	github                  = new(runsimgh.Integration)
-	slack                   = new(runsimslack.Integration)
+	integrationType string
+	github          = new(runsimgh.Integration)
+	slack           = new(runsimslack.Integration)
 
 	// CircleCI environment variables
 	buildUrl, buildNum string
@@ -62,8 +65,7 @@ func init() {
 	seeds = os.Getenv("SEEDS")
 
 	// Not using os.LookupEnv on purpose to reduce the number of variables.
-	githubParam = os.Getenv("GITHUB")
-	slackParam = os.Getenv("SLACK")
+	integrationType = os.Getenv("INTEGRATION")
 
 	shutdownBehavior = os.Getenv("SHUTDOWN_BEHAVIOR")
 	buildUrl = os.Getenv("CIRCLE_BUILD_URL")
@@ -74,7 +76,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	if githubParam != "" {
+	if integrationType == ghIntegrationType {
 		if err := github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
 			log.Fatalf("ERROR: github.ConfigFromState: %v", err)
 		}
@@ -83,18 +85,18 @@ func main() {
 			// If there was no active check run, lambda function would have failed before starting the simulation.
 			log.Fatalf("ERROR: github.SetActiveCheckRun: %v", err)
 		}
-	} else if slackParam != "" {
+	} else if integrationType == slackIntegrationType {
 		err := slack.ConfigFromState(awsRegion, slackAppTokenID)
 		if err != nil {
 			log.Fatalf("ERROR: slack.ConfigFromState: %v", err)
 		}
 	} else {
-		log.Fatalf("ERROR: missing integration config")
+		log.Fatalf("ERROR: missing integration type parameter")
 	}
 
 	// Update github check or send slack message to notify that the image build has started.
 	if notifyOnly {
-		if slackParam != "" {
+		if integrationType == slackIntegrationType {
 			pushNotification(false, buildSlackMessage())
 			os.Exit(0)
 		}
@@ -134,8 +136,8 @@ func main() {
 			TagSpecifications: []*ec2.TagSpecification{{
 				ResourceType: aws.String("instance"),
 				Tags: []*ec2.Tag{{
-					Key:   aws.String("SimID"),
-					Value: aws.String(buildNum)}}},
+					Key:   aws.String("Name"),
+					Value: aws.String("SimID-" + buildNum)}}},
 			},
 
 			InstanceType: aws.String(ec2InstanceType),
@@ -214,7 +216,7 @@ func getAmiId(gitRevision string, svc *ec2.EC2) (amiID string, err error) {
 		Filters: []*ec2.Filter{
 			{
 				Name:   aws.String("name"),
-				Values: []*string{aws.String(fmt.Sprintf(gaiaAmiIdPrefix+"%s", gitRevision))},
+				Values: []*string{aws.String(fmt.Sprintf("%s-%s", gaiaAmiIdPrefix, gitRevision))},
 			}},
 	}
 	if imageID, err = svc.DescribeImages(input); err != nil {
@@ -240,7 +242,7 @@ func pushNotification(failed bool, message string) {
 	if failed {
 		log.Print(message)
 	}
-	if slackParam != "" {
+	if integrationType == slackIntegrationType {
 		if err := slack.PostMessage(message); err != nil {
 			log.Fatalf("ERROR: slack.PostMessage: %v", err)
 		}
@@ -258,7 +260,7 @@ func pushNotification(failed bool, message string) {
 func buildRunsimCommand(seeds, hostId, simId string) string {
 	logObjKey := fmt.Sprintf("sim-id-%s", os.Getenv("CIRCLE_BUILD_NUM"))
 	integration := "-Github"
-	if slackParam != "" {
+	if integrationType == slackIntegrationType {
 		integration = "-Slack"
 	}
 	if genesis {

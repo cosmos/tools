@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,17 +12,14 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	ddb "github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/ssm"
-	ghapp "github.com/bradleyfalzon/ghinstallation"
-	gh "github.com/google/go-github/v27/github"
+	"github.com/cosmos/tools/lib/runsimaws"
+	"github.com/cosmos/tools/lib/runsimgh"
 )
 
 const (
 	// security tokens
-	ssmGitHubAppKey     = "github-sim-app-key"
-	ssmCircleBuildToken = "circle_build_token_simulation"
+	ghAppTokenId  = "github-sim-app-key"
+	circleTokenId = "circle_build_token_simulation"
 
 	// Github app parameters
 	startSimCmd      = "Start sim"
@@ -31,35 +27,24 @@ const (
 	ghConclusionFail = "failure" // The final conclusion of a failed github check
 
 	// GitHub app installation details
-	appIntegrationID  = 30867
-	appInstallationID = 997580
+	appIntegrationId  = "30867"
+	appInstallationId = "997580"
 
 	amiVersion = "master"
 
 	// DynamoDB attribute and table names
 	simStateTable = "SimulationState" // name of the dynamodb table where details from running simulations are stored
-	primaryKey    = "SimLockID"       // primary partition key used by the sim state table
-	attrStatus    = "Status"
-	attrCheckID   = "CheckID"
-	attrBuildURL  = "BuildURL"
-	attrRepoOwner = "RepoOwner"
-	attrRepoName = "RepoName"
+	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
 
-	// simulation parameters
-	blocks  = "100"
-	genesis = "false"
+	awsRegion = "us-east-1"
 )
 
 type CircleApiPayload struct {
-	Revision string          `json:"revision"`
-	Params   BuildParameters `json:"build_parameters"`
-}
-
-type BuildParameters struct {
-	CommitHash string `json:"GAIA_COMMIT_HASH"`
-	Blocks     string `json:"BLOCKS"`
-	Genesis    string `json:"GENESIS"`
-	CheckID    string `json:"CHECK_ID"`
+	Revision        string `json:"revision"`
+	BuildParameters struct {
+		CommitHash      string `json:"gaia-commit-hash"`
+		IntegrationType string `json:"integration-type"`
+	} `json:"parameters"`
 }
 
 type GithubEventPayload struct {
@@ -82,226 +67,86 @@ type GithubEventPayload struct {
 	} `json:"repository"`
 }
 
-func handler(request events.APIGatewayProxyRequest) (proxyResp events.APIGatewayProxyResponse, err error) {
-	var (
-		buildURL, checkRunID string
-		ghAppKey             *ssm.GetParameterOutput
-		listCheckRunsResult  *gh.ListCheckRunsResults
-		ghEvt                GithubEventPayload
-		pr                   *gh.PullRequest
-		checkRun             *gh.CheckRun
-		transport            *ghapp.Transport
-		sessionDDB           = ddb.New(session.Must(session.NewSession()))
-		sessionSSM           = ssm.New(session.Must(session.NewSession()))
-	)
+func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayProxyResponse, err error) {
+	ddb := new(runsimaws.DdbTable)
+	ddb.Config(awsRegion, primaryKey, simStateTable)
 
-	if err = json.Unmarshal([]byte(request.Body), &ghEvt); err != nil {
+	github := new(runsimgh.Integration)
+	// Try to retrieve sim state from database. Success indicates another sim is still running
+	if _ = ddb.GetState("GitHub", github); github.IntegrationType != nil {
+		// TODO: send this response as a PR comment or some other way to notify the user
+		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
+	}
+
+	// Same check for a slack simulation
+	if _ = ddb.GetState("Slack", github); github.IntegrationType != nil {
+		// TODO: send this response as a PR comment or some other way to notify the user
+		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
+	}
+
+	var ghEvent GithubEventPayload
+	if err = json.Unmarshal([]byte(request.Body), &ghEvent); err != nil {
 		log.Printf("INFO: github request: %+v", request.Body)
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: unmarshal github request: %s", err.Error())), err
+		return buildProxyResponse(500, "ERROR: unmarshal github request"), err
 	}
-	if ghEvt.Issue.Pr.Url == "" {
-		return buildProxyResponse(200, fmt.Sprint("INFO: not a PR comment")), err
+	if ghEvent.Issue.Pr.Url == "" {
+		return buildProxyResponse(200, fmt.Sprint("INFO: not a PR comment")), nil
 	}
-	if ghEvt.Comment.Body != startSimCmd {
-		return buildProxyResponse(200, fmt.Sprintf("INFO: not a sim command")), err
-	}
-
-	if ghAppKey, err = getSsmParameter(sessionSSM, ssmGitHubAppKey); err != nil {
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: fetching github app key: %v", err)), err
-	}
-	if transport, err = ghapp.New(http.DefaultTransport, appIntegrationID, appInstallationID,
-		[]byte(*ghAppKey.Parameter.Value)); err != nil {
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: authenticating github app: %v", err)), err
+	if ghEvent.Comment.Body != startSimCmd {
+		return buildProxyResponse(200, fmt.Sprintf("INFO: not a sim command")), nil
 	}
 
-	ghClient := gh.NewClient(&http.Client{Transport: transport})
-	if pr, _, err = ghClient.PullRequests.Get(context.Background(), ghEvt.Repo.Owner.Login, ghEvt.Repo.Name,
-		ghEvt.Issue.Number); err != nil {
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: PullRequests.Get: %v", err)), err
+	if err = github.ConfigFromScratch(awsRegion, ghAppTokenId, ghEvent.Repo.Owner.Login, ghEvent.Repo.Name,
+		ghCheckName, appInstallationId, appIntegrationId, strconv.Itoa(ghEvent.Issue.Number)); err != nil {
+		return buildProxyResponse(500, "ERROR: github.ConfigFromScratch"), err
 	}
 
-	if listCheckRunsResult, _, err = ghClient.Checks.ListCheckRunsForRef(context.Background(), ghEvt.Repo.Owner.Login,
-		ghEvt.Repo.Name, *pr.Head.Ref, &gh.ListCheckRunsOptions{
-			CheckName: aws.String(ghCheckName),
-			Filter:    aws.String("latest"),
-		}); err != nil {
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: listCheckRunsForRef: %v", err)), err
+	if err = github.CreateNewCheckRun(); err != nil {
+		return buildProxyResponse(500, "ERROR: github.CreateNewCheckRun"), err
 	}
 
-	// if we can't find a previous check, create a new one
-	if len(listCheckRunsResult.CheckRuns) == 0 || listCheckRunsResult.CheckRuns[0].GetConclusion() != "" {
-		if checkRun, err = createCheckRun(ghClient, ghEvt, pr); err != nil {
-			return buildProxyResponse(500, fmt.Sprintf("ERROR: createCheckRun: %v", err)), err
-		}
-	} else {
-		checkRun = listCheckRunsResult.CheckRuns[0]
-	}
-
-	simState, err := getSimState(sessionDDB)
+	ssm := new(runsimaws.Ssm)
+	ssm.Config(awsRegion)
+	circleToken, err := ssm.GetParameter(circleTokenId)
 	if err != nil {
-		_ = completeCheckRun(ghClient, checkRun.GetID(), ghConclusionFail,
-			"Failed to retrieve current sim status", ghEvt.Repo.Owner.Login, ghEvt.Repo.Name)
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: getSimState: %v", err)), err
+		response = buildProxyResponse(500, "ERROR: ssm.GetParameter")
+		return
 	}
 
-	// check state to see if there is another sim in progress
-	checkRunID = strconv.FormatInt(checkRun.GetID(), 10)
-	if valStatus, ok := simState.Item[attrStatus]; ok {
-		if *valStatus.S != "finished" {
-			if valCheckID, ok := simState.Item[attrCheckID]; ok {
-				switch *valCheckID.N {
-				case checkRunID:
-					if err = updateCheckRun(ghClient, checkRun.GetID(), ghEvt.Repo.Owner.Login, ghEvt.Repo.Name,
-						"This simulation is currently in progress"); err != nil {
-						log.Printf("ERROR: updateCheckRun: %v", err)
-					}
-					return buildProxyResponse(200, fmt.Sprint("INFO: simulation already in progress")), err
-				default:
-					if err = completeCheckRun(ghClient, checkRun.GetID(), ghConclusionFail,
-						"Another simulation is already in progress", ghEvt.Repo.Owner.Login, ghEvt.Repo.Name); err != nil {
-						log.Printf("ERROR: completeCheckRun: %v", err)
-					}
-					return buildProxyResponse(200, fmt.Sprint("INFO: another simulation already in progress")), err
-				}
-			}
+	payload := new(CircleApiPayload)
+	payload.Revision = amiVersion
+	payload.BuildParameters.CommitHash = github.PR.Head.GetSHA()
+	payload.BuildParameters.IntegrationType = "github"
+
+	if err = triggerCircleciJob(circleToken, *payload); err != nil {
+		ghErr := github.ConcludeCheckRun(aws.String("Failed to trigger CircleCI build job"), aws.String(ghConclusionFail))
+		if ghErr != nil {
+			log.Printf("ERROR: github.ConcludeCheckRun: %v", err)
 		}
+		return buildProxyResponse(500, "ERROR: triggerCircleciJob"), err
 	}
-
-	if buildURL, err = triggerCircleciJob(sessionSSM, CircleApiPayload{
-		Revision: amiVersion,
-		Params: BuildParameters{
-			CommitHash: pr.Head.GetRef(),
-			CheckID:    strconv.FormatInt(checkRun.GetID(), 10),
-			Blocks:     blocks,
-			Genesis:    genesis,
-		}}); err != nil {
-		_ = completeCheckRun(ghClient, checkRun.GetID(), ghConclusionFail,
-			"Failed to trigger CircleCI build job", ghEvt.Repo.Owner.Login, ghEvt.Repo.Name)
-		return buildProxyResponse(500, fmt.Sprintf("ERROR: trigger circleci job: %s", err.Error())), err
-	}
-
-	if err = putSimState(sessionDDB, "queued", checkRunID,ghEvt.Repo.Name, ghEvt.Repo.Name, buildURL); err != nil {
-		log.Printf("ERROR: putSimState: %v", err)
-	}
-
-	err = updateCheckRun(ghClient, checkRun.GetID(), ghEvt.Repo.Owner.Login, ghEvt.Repo.Name,
-		fmt.Sprintf("Image build in progress: %s", buildURL))
 
 	return buildProxyResponse(200, fmt.Sprint("INFO: Init attempt finished")), err
 }
 
-type CircleJobTriggerResp struct {
-	Status   string `json:"status"`
-	Body     string `json:"body"`
-	BuildURL string `json:"build_url"`
-}
-
-func triggerCircleciJob(sessionSSM *ssm.SSM, payload CircleApiPayload) (buildUrl string, err error) {
-	var (
-		circleToken *ssm.GetParameterOutput
-		jsonPayload []byte
-		request     *http.Request
-		response    *http.Response
-		data        CircleJobTriggerResp
-		httpClient  = &http.Client{Timeout: 2 * time.Second}
-	)
-
-	if jsonPayload, err = json.Marshal(payload); err != nil {
-		return buildUrl, err
-	}
-	if circleToken, err = getSsmParameter(sessionSSM, ssmCircleBuildToken); err != nil {
-		return buildUrl, err
+func triggerCircleciJob(circleToken string, payload CircleApiPayload) (err error) {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return
 	}
 
-	circleJobUrl := fmt.Sprintf("https://circleci.com/api/v1.1/project/github/tendermint/images/tree/%s?circle-token=%s",
-		payload.Revision, *circleToken.Parameter.Value)
-	if request, err = http.NewRequest("POST", circleJobUrl, bytes.NewBuffer(jsonPayload)); err != nil {
-		return buildUrl, err
+	var request *http.Request
+	url := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s", circleToken)
+	if request, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload)); err != nil {
+		return
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "*/*") // without this header, CircleCI doesn't return valid JSON...
-	if response, err = httpClient.Do(request); err != nil {
-		return buildUrl, err
-	}
-	defer func() {
-		closeErr := response.Body.Close()
-		if err == nil {
-			err = closeErr
-		}
-	}()
 
-	err = json.NewDecoder(response.Body).Decode(&data)
-	return data.BuildURL, err
-}
+	var httpClient = &http.Client{Timeout: 2 * time.Second}
+	_, err = httpClient.Do(request)
 
-func completeCheckRun(client *gh.Client, checkID int64, conclusion, summary, repoOwner, repoName string) (err error) {
-	_, _, err = client.Checks.UpdateCheckRun(context.Background(), repoOwner, repoName, checkID,
-		gh.UpdateCheckRunOptions{
-			Name:       ghCheckName,
-			Conclusion: aws.String(conclusion),
-			Output: &gh.CheckRunOutput{
-				Title:   aws.String("Details"),
-				Summary: aws.String(summary),
-			},
-			CompletedAt: &gh.Timestamp{
-				Time: time.Now()},
-		})
-	return err
-}
-
-func updateCheckRun(client *gh.Client, checkID int64, repoOwner, repoName, summary string) (err error) {
-	_, _, err = client.Checks.UpdateCheckRun(context.Background(), repoOwner, repoName, checkID,
-		gh.UpdateCheckRunOptions{
-			Name: ghCheckName,
-			Output: &gh.CheckRunOutput{
-				Title:   aws.String("Details"),
-				Summary: aws.String(summary),
-			},
-		})
-	return err
-}
-
-func createCheckRun(ghClient *gh.Client, ghEvt GithubEventPayload, pr *gh.PullRequest) (*gh.CheckRun, error) {
-	checkRun, _, err := ghClient.Checks.CreateCheckRun(context.Background(), ghEvt.Repo.Owner.Login, ghEvt.Repo.Name,
-		gh.CreateCheckRunOptions{
-			Name:       ghCheckName,
-			Status:     aws.String("queued"),
-			HeadBranch: pr.Head.GetRef(),
-			HeadSHA:    pr.Head.GetSHA(),
-		})
-	return checkRun, err
-}
-
-func getSimState(sessionDDB *ddb.DynamoDB) (*ddb.GetItemOutput, error) {
-	output, err := sessionDDB.GetItem(&ddb.GetItemInput{
-		Key:       map[string]*ddb.AttributeValue{primaryKey: {S: aws.String("V1")}},
-		TableName: aws.String(simStateTable),
-	})
-	return output, err
-}
-
-func putSimState(sessionDDB *ddb.DynamoDB, status, checkID, repoName, repoOwner, buildURL string) (err error) {
-	_, err = sessionDDB.PutItem(&ddb.PutItemInput{
-		Item: map[string]*ddb.AttributeValue{
-			primaryKey:   {S: aws.String("V1")},
-			attrStatus:   {S: aws.String(status)},
-			attrCheckID:  {N: aws.String(checkID)},
-			attrBuildURL: {S: aws.String(buildURL)},
-			attrRepoName: {S: aws.String(repoName)},
-			attrRepoOwner: {S: aws.String(repoOwner)},
-		},
-		TableName: aws.String(simStateTable),
-	})
-	return err
-}
-
-// get the value for parameterName from the AWS secure parameters store
-func getSsmParameter(sessionSSM *ssm.SSM, parameterName string) (*ssm.GetParameterOutput, error) {
-	getParamOutput, err := sessionSSM.GetParameter(&ssm.GetParameterInput{
-		Name:           &parameterName,
-		WithDecryption: aws.Bool(true),
-	})
-	return getParamOutput, err
+	return
 }
 
 func buildProxyResponse(responseCode int, message string) events.APIGatewayProxyResponse {

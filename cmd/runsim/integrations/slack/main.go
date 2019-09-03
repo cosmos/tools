@@ -19,95 +19,49 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ssm"
+	"github.com/cosmos/tools/lib/runsimaws"
+	"github.com/cosmos/tools/lib/runsimslack"
 )
 
-const paramNameSlackSecret = "slack_signing_secret"
-const paramNameCircleToken = "circle_build_token_simulation"
+const (
+	ssmSlackSecretId   = "slack-cmd-secret"
+	ssmCircleTokenId   = "circle-token-sim"
+	ssmSlackChannelId  = "slack-channel-id"
+	ssmSlackAppTokenId = "slack-app-key"
 
-var (
-	err      error
-	response *http.Response
-	request  *http.Request
+	awsRegion     = "us-east-1"
+	primaryKey    = "IntegrationType"
+	simStateTable = "SimulationState"
 )
-
-type CircleStatusCheckResp struct {
-	Status    string `json:"status"`
-	Lifecycle string `json:"lifecycle"`
-}
-
-type CircleJobTriggerResp struct {
-	Status   string `json:"status"`
-	Body     string `json:"body"`
-	BuildURL string `json:"build_url"`
-}
 
 type CircleApiPayload struct {
-	Revision        *string `json:"revision"`
+	Revision        string `json:"revision"`
 	BuildParameters struct {
-		CommitHash       string `json:"GAIA_COMMIT_HASH"`
-		Blocks           string `json:"BLOCKS"`
-		SlackResponseUrl string `json:"SLACK_RESP_URL"`
-		Genesis          string `json:"GENESIS"`
-	} `json:"build_parameters"`
+		CommitHash      string `json:"gaia-commit-hash"`
+		Blocks          string `json:"blocks"`
+		Genesis         string `json:"genesis"`
+		IntegrationType string `json:"integration-type"`
+	} `json:"parameters"`
 }
 
-type SlackPayload struct {
-	Text string `json:"text"`
-}
-
-func pushSlackReply(message string, responseUrl string) error {
-	var slackPayload []byte
-	if slackPayload, err = json.Marshal(SlackPayload{
-		Text: message,
-	}); err != nil {
-		return err
-	}
-	if request, err = http.NewRequest("POST", responseUrl, bytes.NewBuffer(slackPayload)); err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json;charset=UTF-8")
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	if response, err = httpClient.Do(request); err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	return nil
-}
-
-func getSsmParameter(parameterName string) (string, error) {
-	var getParamOutput *ssm.GetParameterOutput
-	sessionSSM := ssm.New(session.Must(session.NewSession()))
-	if getParamOutput, err = sessionSSM.GetParameter(&ssm.GetParameterInput{
-		Name:           &parameterName,
-		WithDecryption: aws.Bool(true),
-	}); err != nil {
-		return *getParamOutput.Parameter.Value, err
-	}
-	return *getParamOutput.Parameter.Value, nil
-}
-
-func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
-	circleApiPayload := new(CircleApiPayload)
+func parseSlackRequest(slashCmdPayload string) (payload CircleApiPayload, respUrl string, err error) {
 	reFields := regexp.MustCompile(`^token.*?&command=(.*?)&text=(.*?)&response_url=(.*?)&`)
 	reBlocks := regexp.MustCompile(`^[1-9][0-9]{0,3}$`)
 
 	matches := reFields.FindStringSubmatch(slashCmdPayload)
 	for _, match := range matches[1:] {
 		if match, err = url.PathUnescape(match); err != nil {
-			return *circleApiPayload, err
+			return
 		}
 		if match == "" {
-			return *circleApiPayload, nil
+			return
 		}
 		// First part of the slash command is the command name
 		if match == "/sim_start" {
-			circleApiPayload.Revision = aws.String("ami-gaia-sim")
+			payload.Revision = "ami-gaia-sim"
 			continue
 		} else if match == "/dev-sim_start" {
-			circleApiPayload.Revision = aws.String("master")
+			payload.Revision = "master"
 			continue
 		}
 
@@ -119,35 +73,32 @@ func processSlackRequest(slashCmdPayload string) (CircleApiPayload, error) {
 			for _, param := range simParams {
 				switch param {
 				case reBlocks.FindString(param):
-					circleApiPayload.BuildParameters.Blocks = param
+					payload.BuildParameters.Blocks = param
 				case "yes":
-					circleApiPayload.BuildParameters.Genesis = "true"
+					payload.BuildParameters.Genesis = "true"
 				// Without this case the branch will be set to "no"
 				// Temporary solution until we figure out how to handle custom genesis better
 				// TODO: Figure out a better way to handle genesis file
 				case "no":
-					circleApiPayload.BuildParameters.Genesis = "false"
+					payload.BuildParameters.Genesis = "false"
 				default:
-					circleApiPayload.BuildParameters.CommitHash = param
+					payload.BuildParameters.CommitHash = param
 				}
 			}
 			continue
 		}
-		circleApiPayload.BuildParameters.SlackResponseUrl = match
+		payload.BuildParameters.IntegrationType = "slack"
+		respUrl = match
 	}
-	return *circleApiPayload, nil
+	return
 }
 
-func verifySlackRequest(slackSig, slackTimestamp, requestBody string) error {
-	var slackSecret string
-	var intTimestamp int64
+func verifySlackRequest(slackSig, slackTimestamp, slackSecret, requestBody string) (err error) {
+	intTimestamp, err := strconv.ParseInt(slackTimestamp, 10, 64)
+	if err != nil {
+		return
+	}
 
-	if intTimestamp, err = strconv.ParseInt(slackTimestamp, 10, 64); err != nil {
-		return err
-	}
-	if slackSecret, err = getSsmParameter(paramNameSlackSecret); err != nil {
-		return err
-	}
 	if math.Abs(time.Since(time.Unix(intTimestamp, 0)).Seconds()) > 120 {
 		// The request timestamp is more than two minutes from local time.
 		// It could be a replay attack, so let's ignore it.
@@ -155,115 +106,113 @@ func verifySlackRequest(slackSig, slackTimestamp, requestBody string) error {
 	}
 
 	requestHash := hmac.New(sha256.New, []byte(slackSecret))
-	if _, err = requestHash.Write([]byte("v0:" + slackTimestamp + ":" + requestBody)); err != nil {
-		return err
+	if _, err = requestHash.Write([]byte(fmt.Sprintf("v0:%s:%s", slackTimestamp, requestBody))); err != nil {
+		return
 	}
 	if hmac.Equal([]byte(slackSig), []byte("v0="+hex.EncodeToString(requestHash.Sum(nil)))) {
-		return nil
+		return
 	}
 	return errors.New("failed")
 }
 
-func circleciStatusCheck() error {
-	var data []CircleStatusCheckResp
-
-	circleUrl := "https://circleci.com/api/v1.1/project/github/tendermint/images?limit=1&shallow=true"
-	if request, err = http.NewRequest("GET", circleUrl, nil); err != nil {
-		return err
+func triggerCircleciJob(circleToken string, payload CircleApiPayload) (err error) {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return
 	}
-	// Without this header, Circle doesn't return valid JSON...
-	request.Header.Set("Accept", "*/*")
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	if response, err = httpClient.Do(request); err != nil {
-		return err
-	}
-	defer response.Body.Close()
-
-	if err = json.NewDecoder(response.Body).Decode(&data); err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return errors.New("ERROR: could not check status of simulation Circleci job")
-	} else if data[0].Lifecycle != "finished" {
-		return errors.New("ERROR: another simulation is already in progress")
-	}
-	return nil
-}
-
-func triggerCircleciJob(payload CircleApiPayload) error {
-	var (
-		circleBuildToken string
-		jsonPayload      []byte
-		request          *http.Request
-		response         *http.Response
-		err              error
-		data             CircleJobTriggerResp
-	)
-
-	if circleBuildToken, err = getSsmParameter(paramNameCircleToken); err != nil {
-		return err
-	}
-	circleJobUrl := fmt.Sprintf("https://circleci.com/api/v1.1/project/github/tendermint/images/tree/%s?circle-token=%s",
-		*payload.Revision, circleBuildToken)
-
-	if jsonPayload, err = json.Marshal(payload); err != nil {
-		return err
-	}
-	log.Printf("INFO: circleci payload: %v", jsonPayload)
-	if request, err = http.NewRequest("POST", circleJobUrl, bytes.NewBuffer(jsonPayload)); err != nil {
-		return err
+	var request *http.Request
+	circleUrl := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s", circleToken)
+	if request, err = http.NewRequest("POST", circleUrl, bytes.NewBuffer(jsonPayload)); err != nil {
+		return
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Accept", "*/*")
+	request.Header.Set("Accept", "*/*") // without this header, CircleCI doesn't return valid JSON...
 
-	client := &http.Client{Timeout: 2 * time.Second}
-	if response, err = client.Do(request); err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if err = json.NewDecoder(response.Body).Decode(&data); err != nil {
-		return err
-	}
-	if err = pushSlackReply(fmt.Sprintf("Follow progress notifications in #bot-simulation. Image build in progress: %s",
-		data.BuildURL), payload.BuildParameters.SlackResponseUrl); err != nil {
-		return err
-	}
-	return nil
+	var client = &http.Client{Timeout: 2 * time.Second}
+	_, err = client.Do(request)
+	return
 }
 
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	var circlePayload CircleApiPayload
-	gatewayResponse := new(events.APIGatewayProxyResponse)
-	gatewayResponse.StatusCode = 200
+func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayProxyResponse, err error) {
+	ssm := new(runsimaws.Ssm)
+	ssm.Config(awsRegion)
 
-	if circlePayload, err = processSlackRequest(request.Body); err != nil {
-		gatewayResponse.Body = fmt.Sprintf("ERROR: parsing slack command payload: %s", err.Error())
-		return *gatewayResponse, nil
+	// Response code always has to be 200. https://api.slack.com/slash-commands#responding_to_commands
+	response.StatusCode = 200
+
+	circlePayload, respUrl, err := parseSlackRequest(request.Body)
+	if err != nil {
+		response.Body = fmt.Sprintf("ERROR: parseSlackRequest: %v", err)
+		return
 	}
-	if circlePayload.Revision == nil {
-		gatewayResponse.Body = "ERROR: slash command is missing parameters"
-		return *gatewayResponse, nil
+	if circlePayload.Revision == "" {
+		response.Body = "ERROR: slash command is missing parameters"
+		return
 	}
+
 	// Need an immediate response to slack to avoid the command displaying a timeout error
-	if err = pushSlackReply("Warming up!", circlePayload.BuildParameters.SlackResponseUrl); err != nil {
-		gatewayResponse.Body = fmt.Sprintf("ERROR: pushing slack message: %s", err.Error())
-		return *gatewayResponse, nil
+	slack := new(runsimslack.Integration)
+	err = slack.PushSlackCmdReply("Warming up!", respUrl)
+	if err != nil {
+		response.Body = fmt.Sprintf("ERROR: pushing slack message: %v", err)
+		return
 	}
-	if err = verifySlackRequest(request.Headers["X-Slack-Signature"], request.Headers["X-Slack-Request-Timestamp"], request.Body); err != nil {
-		gatewayResponse.Body = fmt.Sprintf("ERROR: verifying slack request: %s", err.Error())
-		return *gatewayResponse, nil
+
+	// Try to retrieve sim state from database. Success indicates another sim is still running
+	ddb := new(runsimaws.DdbTable)
+	ddb.Config(awsRegion, primaryKey, simStateTable)
+	if _ = ddb.GetState("GitHub", slack); slack.IntegrationType != nil {
+		response.Body = "INFO: another simulation is in progress"
+		return
 	}
-	if err = circleciStatusCheck(); err != nil {
-		gatewayResponse.Body = fmt.Sprintf("ERROR: checking Circle job status: %s", err.Error())
-		return *gatewayResponse, nil
+	if _ = ddb.GetState("Slack", slack); slack.IntegrationType != nil {
+		response.Body = "INFO: another simulation is in progress"
+		return
 	}
-	if err = triggerCircleciJob(circlePayload); err != nil {
-		gatewayResponse.Body = fmt.Sprintf("ERROR: triggering Circle job: %s", err.Error())
-		return *gatewayResponse, nil
+
+	slackSecret, err := ssm.GetParameter(ssmSlackSecretId)
+	if err != nil {
+		return
 	}
-	gatewayResponse.Body = "Init attempt complete."
-	return *gatewayResponse, nil
+	if err = verifySlackRequest(request.Headers["X-Slack-Signature"], request.Headers["X-Slack-Request-Timestamp"],
+		slackSecret, request.Body); err != nil {
+		response.Body = fmt.Sprintf("ERROR: verifySlackRequest: %v", err)
+		return
+	}
+
+	circleToken, err := ssm.GetParameter(ssmCircleTokenId)
+	if err != nil {
+		return
+	}
+	if err = triggerCircleciJob(circleToken, circlePayload); err != nil {
+		response.Body = fmt.Sprintf("ERROR: triggerCircleciJob: %v", err)
+		return
+	}
+
+	channelId, err := ssm.GetParameter(ssmSlackChannelId)
+	if err != nil {
+		return
+	}
+
+	if err = slack.ConfigFromScratch(awsRegion, channelId, ssmSlackAppTokenId); err != nil {
+		response.Body = fmt.Sprintf("ERROR: slack.ConfigFromScratch: %v", err)
+		return
+	}
+
+	message := fmt.Sprintf("Simulation has started!")
+	if err = slack.PostMessage(message); err != nil {
+		response.Body = fmt.Sprintf("ERROR: slack.PostMessage: %v", err)
+		return
+	}
+
+	if err = ddb.PutState(slack); err != nil {
+		response.Body = fmt.Sprintf("ERROR: ddb.PutState: %v", err)
+		return
+	}
+
+	response.Body = "Init attempt complete."
+	return
 }
 
 func main() {
