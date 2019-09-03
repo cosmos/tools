@@ -1,20 +1,25 @@
 package runsimslack
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/nlopes/slack"
+	"net/http"
+	"time"
 )
 
 const primaryKey = "IntegrationType"
 const tableName = "SimulationState"
 
 type Integration struct {
-	Client    *slack.Client
-	State     *runsimaws.DdbTable
-	MessageTS *string
-	ChannelID *string
+	Client          *slack.Client
+	State           *runsimaws.DdbTable
+	IntegrationType *string
+	MessageTS       *string
+	ChannelID       *string
 }
 
 func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (err error) {
@@ -42,22 +47,38 @@ func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (er
 	return nil
 }
 
-func (Slack *Integration) ConfigFromScratch(awsRegion, messageTS, channelID, slackAppTokenID string) (err error) {
-	Slack.MessageTS = &messageTS
-	Slack.ChannelID = &channelID
-
-	Slack.State = new(runsimaws.DdbTable)
-	Slack.State.Config(awsRegion, primaryKey, tableName)
-
-	if err = Slack.State.PutState(Slack); err != nil {
-		return
-	}
+func (Slack *Integration) ConfigFromScratch(awsRegion, channelId, slackAppTokenID string) (err error) {
+	Slack.IntegrationType = aws.String("Slack")
+	Slack.MessageTS = aws.String("")
+	Slack.ChannelID = &channelId
 
 	ssm := new(runsimaws.Ssm)
 	ssm.Config(awsRegion)
 
 	token, err := ssm.GetParameter(slackAppTokenID)
 	Slack.Client = slack.New(token)
+	return
+}
+
+func (Slack *Integration) PushSlackCmdReply(message, responseUrl string) (err error) {
+	payload, err := json.Marshal(struct{Text string `json:"text"`}{Text: message})
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequest("POST", responseUrl, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+
+	request.Header.Set("Content-Type", "application/json;charset=UTF-8")
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+
+	err = response.Body.Close()
 	return
 }
 

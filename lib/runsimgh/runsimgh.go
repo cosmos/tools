@@ -17,16 +17,17 @@ const primaryKey = "IntegrationType"
 const tableName = "SimulationState"
 
 type Integration struct {
-	Client         *github.Client
-	PR             *github.PullRequest
-	ActiveCheckRun *github.CheckRun
-	State          *runsimaws.DdbTable
-	CheckRunName   *string
-	InstallationID *string
-	IntegrationID  *string
-	RepoOwner      *string
-	RepoName       *string
-	PrNum          *string
+	Client          *github.Client
+	PR              *github.PullRequest
+	ActiveCheckRun  *github.CheckRun
+	State           *runsimaws.DdbTable
+	IntegrationType *string
+	CheckRunName    *string
+	InstallationID  *string
+	IntegrationID   *string
+	RepoOwner       *string
+	RepoName        *string
+	PrNum           *string
 }
 
 // Retrieve simulation state data from DynamoDB
@@ -71,6 +72,7 @@ func (gh *Integration) ConfigFromScratch(awsRegion, privateKeyID, repoOwner, rep
 	gh.InstallationID = &installationID
 	gh.IntegrationID = &integrationID
 	gh.PrNum = &prNum
+	gh.IntegrationType = aws.String("GitHub")
 	gh.State = new(runsimaws.DdbTable)
 	gh.State.Config(awsRegion, primaryKey, tableName)
 
