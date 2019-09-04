@@ -96,8 +96,8 @@ func syncS3(fileNames ...string) (objUrls map[string]string, err error) {
 
 	var file *os.File
 	for _, fileName := range fileNames {
-		_, err = os.Stat(fileName)
-		if err == nil {
+		_, statErr := os.Stat(fileName)
+		if statErr == nil {
 			if file, err = os.Open(fileName); err != nil {
 				return
 			}
@@ -111,8 +111,6 @@ func syncS3(fileNames ...string) (objUrls map[string]string, err error) {
 				return
 			}
 			objUrls[fileName] = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", logBucket, objKey)
-		} else {
-			continue
 		}
 	}
 	return
