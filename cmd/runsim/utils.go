@@ -230,16 +230,15 @@ func addFileToZip(zipWriter *zip.Writer, fileName string) (err error) {
 func pushNotification(failed bool, message string) {
 	last, lastCheckErr := checkIfLast()
 	if notifySlack {
+		if err := slack.PostMessage(message); err != nil {
+			log.Printf("ERROR: slack.PostMessage: %v", err)
+		}
 		if last {
 			err := slack.PostMessage("Simulation is finished!")
 			if err != nil {
 				log.Printf("ERROR: slack.PostMessage: %v", err)
 			}
 			_ = slack.DeleteState()
-		} else {
-			if err := slack.PostMessage(message); err != nil {
-				log.Printf("ERROR: slack.PostMessage: %v", err)
-			}
 		}
 	} else if notifyGithub {
 		conclusion := "success"
