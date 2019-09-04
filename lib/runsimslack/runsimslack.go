@@ -89,7 +89,7 @@ func (Slack *Integration) PostMessage(message string) (err error) {
 		return err
 	}
 
-	if Slack.MessageTS == nil {
+	if *Slack.MessageTS == "" {
 		Slack.MessageTS = aws.String(messageTS)
 	}
 	return
