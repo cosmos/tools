@@ -80,7 +80,6 @@ func main() {
 		if err := github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
 			log.Fatalf("ERROR: github.ConfigFromState: %v", err)
 		}
-		// If there was no active check run, lambda function would have failed before starting the simulation.
 		if err := github.SetActiveCheckRun(); err != nil || github.ActiveCheckRun == nil {
 			log.Fatalf("ERROR: github.SetActiveCheckRun: %v", err)
 		}
@@ -89,6 +88,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("ERROR: slack.ConfigFromState: %v", err)
 		}
+	} else if integrationType == "CI" {
+		log.Println("Just CircleCI things!")
+		os.Exit(0)
 	} else {
 		log.Fatalf("ERROR: missing integration type parameter")
 	}
@@ -96,10 +98,10 @@ func main() {
 	// Update github check or send slack message to notify that the image build has started.
 	if notifyOnly {
 		if integrationType == slackIntegrationType {
-			pushNotification(false, buildSlackMessage())
+			pushNotification(false, buildInitMessage())
 			os.Exit(0)
 		}
-		pushNotification(false, buildCheckSummary())
+		pushNotification(false, buildInitMessage())
 		os.Exit(0)
 	}
 
@@ -280,13 +282,9 @@ func buildRunsimCommand(seeds, hostId, simId string) string {
 		simId, hostId, logObjKey, integration, seeds, blocks, period)
 }
 
-func buildSlackMessage() string {
-	return fmt.Sprintf("*Starting simulation #%s.* SDK hash/tag/branch: `%s`. <%s|Circle build url>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
+func buildInitMessage() string {
+	return fmt.Sprintf("*ID #%s.* SDK hash/tag/branch: `%s`. <%s|Circle build url>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
 		buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
-}
-
-func buildCheckSummary() string {
-	return fmt.Sprintf("Image build: %s\n", buildUrl)
 }
 
 // Function used if the program crashes out. Attempts to remove the state information from dynamoDB

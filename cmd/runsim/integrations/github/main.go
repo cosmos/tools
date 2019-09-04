@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	// security tokens
-	ghAppTokenId  = "github-sim-app-key"
-	circleTokenId = "circle_build_token_simulation"
+	// Security token IDs
+	ssmGhAppTokenId  = "github-sim-app-key"
+	ssmCircleTokenId = ""
 
 	// Github app parameters
 	startSimCmd      = "Start sim"
@@ -33,10 +33,9 @@ const (
 	amiVersion = "master"
 
 	// DynamoDB attribute and table names
+	awsRegion = "us-east-1"
 	simStateTable = "SimulationState" // name of the dynamodb table where details from running simulations are stored
 	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
-
-	awsRegion = "us-east-1"
 )
 
 type CircleApiPayload struct {
@@ -96,7 +95,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return buildProxyResponse(200, fmt.Sprintf("INFO: not a sim command")), nil
 	}
 
-	if err = github.ConfigFromScratch(awsRegion, ghAppTokenId, ghEvent.Repo.Owner.Login, ghEvent.Repo.Name,
+	if err = github.ConfigFromScratch(awsRegion, ssmGhAppTokenId, ghEvent.Repo.Owner.Login, ghEvent.Repo.Name,
 		ghCheckName, appInstallationId, appIntegrationId, strconv.Itoa(ghEvent.Issue.Number)); err != nil {
 		return buildProxyResponse(500, "ERROR: github.ConfigFromScratch"), err
 	}
@@ -107,7 +106,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 
 	ssm := new(runsimaws.Ssm)
 	ssm.Config(awsRegion)
-	circleToken, err := ssm.GetParameter(circleTokenId)
+	circleToken, err := ssm.GetParameter(ssmCircleTokenId)
 	if err != nil {
 		response = buildProxyResponse(500, "ERROR: ssm.GetParameter")
 		return
@@ -125,6 +124,8 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		}
 		return buildProxyResponse(500, "ERROR: triggerCircleciJob"), err
 	}
+
+	err = github.UpdateCheckRunStatus(github.ActiveCheckRun.Status, aws.String("Image build in progress. "))
 
 	return buildProxyResponse(200, fmt.Sprint("INFO: Init attempt finished")), err
 }

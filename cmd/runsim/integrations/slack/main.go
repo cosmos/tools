@@ -24,14 +24,19 @@ import (
 )
 
 const (
+	// Security token IDs
 	ssmSlackSecretId   = "slack-cmd-secret"
 	ssmCircleTokenId   = "circle-token-sim"
 	ssmSlackChannelId  = "slack-channel-id"
 	ssmSlackAppTokenId = "slack-app-key"
 
-	awsRegion     = "us-east-1"
-	primaryKey    = "IntegrationType"
-	simStateTable = "SimulationState"
+	slashCmd = "/sim_start"
+	slashCmdDev = "/dev_sim_start"
+
+	// DynamoDB attribute and table names
+	awsRegion = "us-east-1"
+	simStateTable = "SimulationState" // name of the dynamodb table where details from running simulations are stored
+	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
 )
 
 type CircleApiPayload struct {
@@ -57,10 +62,10 @@ func parseSlackRequest(slashCmdPayload string) (payload CircleApiPayload, respUr
 			return
 		}
 		// First part of the slash command is the command name
-		if match == "/sim_start" {
+		if match == slashCmd {
 			payload.Revision = "ami-gaia-sim"
 			continue
-		} else if match == "/dev-sim_start" {
+		} else if match == slashCmdDev {
 			payload.Revision = "master"
 			continue
 		}
@@ -200,7 +205,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return
 	}
 
-	message := fmt.Sprintf("Simulation has started!")
+	message := fmt.Sprintf("Simulation has started! https://circleci.com/gh/tendermint/images/tree/%s", circlePayload.Revision)
 	if err = slack.PostMessage(message); err != nil {
 		response.Body = fmt.Sprintf("ERROR: slack.PostMessage: %v", err)
 		return
