@@ -42,9 +42,7 @@ func configIntegration() {
 			log.Printf("ERROR: github.ConfigFromState: %v", err)
 			uploadLogAndExit()
 		}
-
 		if err = github.SetActiveCheckRun(); err != nil {
-			// Either lambda function or execmgmt would have failed if there was no active check run
 			log.Printf("ERROR: github.SetActiveCheckRun: %v", err)
 			uploadLogAndExit()
 		}
@@ -234,13 +232,12 @@ func pushNotification(failed bool, message string) {
 			log.Printf("ERROR: slack.PostMessage: %v", err)
 		}
 		if last {
-			err := slack.PostMessage("Simulation is finished!")
-			if err != nil {
+			if err := slack.PostMessage("Simulation is finished!"); err != nil {
 				log.Printf("ERROR: slack.PostMessage: %v", err)
 			}
 			_ = slack.DeleteState()
 		}
-	} else if notifyGithub {
+	} else if notifyGithub { // Using this else to avoid any nasty bugs
 		conclusion := "success"
 		if lastCheckErr != nil {
 			log.Printf("ERROR: checkIfLast: %v", lastCheckErr)
