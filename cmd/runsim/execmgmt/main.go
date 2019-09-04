@@ -283,7 +283,7 @@ func buildRunsimCommand(seeds, hostId, simId string) string {
 }
 
 func buildInitMessage() string {
-	return fmt.Sprintf("*ID #%s.* SDK hash/tag/branch: `%s`. <%s|Circle build url>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
+	return fmt.Sprintf("*ID #%s.* SDK hash/tag/branch: `%s`. <%s|Build URL>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
 		buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
 }
 

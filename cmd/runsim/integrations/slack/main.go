@@ -205,7 +205,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return
 	}
 
-	message := fmt.Sprintf("Simulation has started! https://circleci.com/gh/tendermint/images/tree/%s", circlePayload.Revision)
+	message := fmt.Sprintf("Simulation has started! <https://circleci.com/gh/tendermint/images/tree/%s|CircleCI>", circlePayload.Revision)
 	if err = slack.PostMessage(message); err != nil {
 		response.Body = fmt.Sprintf("ERROR: slack.PostMessage: %v", err)
 		return
