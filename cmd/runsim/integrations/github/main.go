@@ -23,14 +23,13 @@ const (
 
 	// Github app parameters
 	startSimCmd      = "Start sim"
+	startSimCmdDev	 = "Start sim dev"
 	ghCheckName      = "Long sim"
 	ghConclusionFail = "failure" // The final conclusion of a failed github check
 
 	// GitHub app installation details
 	appIntegrationId  = "30867"
 	appInstallationId = "997580"
-
-	amiVersion = "master"
 
 	// DynamoDB attribute and table names
 	awsRegion = "us-east-1"
@@ -91,7 +90,14 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	if ghEvent.Issue.Pr.Url == "" {
 		return buildProxyResponse(200, fmt.Sprint("INFO: not a PR comment")), nil
 	}
-	if ghEvent.Comment.Body != startSimCmd {
+
+	var amiVersion string
+	switch ghEvent.Comment.Body {
+	case startSimCmd:
+		amiVersion = "ami-gaia-sim"
+	case startSimCmdDev:
+		amiVersion = "master"
+	default:
 		return buildProxyResponse(200, fmt.Sprintf("INFO: not a sim command")), nil
 	}
 
