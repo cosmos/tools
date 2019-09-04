@@ -111,6 +111,8 @@ func syncS3(fileNames ...string) (objUrls map[string]string, err error) {
 				return
 			}
 			objUrls[fileName] = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", logBucket, objKey)
+		} else {
+			continue
 		}
 	}
 	return
