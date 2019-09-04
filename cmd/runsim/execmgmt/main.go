@@ -80,9 +80,8 @@ func main() {
 		if err := github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
 			log.Fatalf("ERROR: github.ConfigFromState: %v", err)
 		}
+		// If there was no active check run, lambda function would have failed before starting the simulation.
 		if err := github.SetActiveCheckRun(); err != nil || github.ActiveCheckRun == nil {
-			_ = github.CreateNewCheckRun()
-			// If there was no active check run, lambda function would have failed before starting the simulation.
 			log.Fatalf("ERROR: github.SetActiveCheckRun: %v", err)
 		}
 	} else if integrationType == slackIntegrationType {
@@ -107,9 +106,11 @@ func main() {
 	sessionEC2 := ec2.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
 	amiId, err := getAmiId(sdkGitRev, sessionEC2)
 	if err != nil {
+		cleanup()
 		log.Fatalf("ERROR: getAmiId: %v", err)
 	}
 	if amiId == "" {
+		cleanup()
 		log.Fatalf("ERROR: simulation AMI not found")
 	}
 
@@ -160,6 +161,7 @@ func main() {
 					// If no instances have been started yet, mark the simulation as failed
 					if index == 1 {
 						pushNotification(true, summary)
+						cleanup()
 						os.Exit(1)
 					}
 					// Continue the simulation with the seeds that have already started
@@ -173,6 +175,7 @@ func main() {
 				terminateInstances(sessionEC2, instanceIds)
 			}
 			pushNotification(true, summary)
+			cleanup()
 			os.Exit(1)
 		}
 		// Saving these just in case we need to terminate them prematurely
@@ -190,6 +193,7 @@ func makeSeedLists(seeds string) map[int]string {
 	lists := make(map[int]string)
 	seedsInt, err := strconv.Atoi(seeds)
 	if err != nil {
+		cleanup()
 		log.Fatalf("ERROR: seed list contains invalid values")
 	}
 
@@ -237,21 +241,23 @@ func terminateInstances(svc *ec2.EC2, instanceIds []*string) {
 }
 
 func pushNotification(failed bool, message string) {
-	// If the simulation failed, and pushing the notification also fails after this, need someplace to record
-	// the simulation failure message.
+	// If the simulation failed, and pushing the notification also fails after this point, record the failure message.
 	if failed {
 		log.Print(message)
 	}
 	if integrationType == slackIntegrationType {
 		if err := slack.PostMessage(message); err != nil {
+			cleanup()
 			log.Fatalf("ERROR: slack.PostMessage: %v", err)
 		}
 	} else if failed {
 		if err := github.ConcludeCheckRun(&message, aws.String("failure")); err != nil {
+			cleanup()
 			log.Fatalf("ERROR: github.ConcludeCheckRun: %v", err)
 		}
 	} else {
 		if err := github.UpdateCheckRunStatus(aws.String("in_progress"), &message); err != nil {
+			cleanup()
 			log.Fatalf("ERROR: github.UpdateCheckRunStatus: %v", err)
 		}
 	}
@@ -281,4 +287,17 @@ func buildSlackMessage() string {
 
 func buildCheckSummary() string {
 	return fmt.Sprintf("Image build: %s\n", buildUrl)
+}
+
+// Function used if the program crashes out. Attempts to remove the state information from dynamoDB
+func cleanup() {
+	if integrationType == slackIntegrationType {
+		if err := slack.DeleteState(); err != nil {
+			log.Println(err)
+		}
+	} else {
+		if err := github.DeleteState(); err != nil {
+			log.Println(err)
+		}
+	}
 }
