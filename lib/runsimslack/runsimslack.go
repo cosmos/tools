@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/nlopes/slack"
-	"net/http"
-	"time"
 )
 
 const primaryKey = "IntegrationType"
@@ -25,15 +26,7 @@ type Integration struct {
 func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (err error) {
 	Slack.State = new(runsimaws.DdbTable)
 	Slack.State.Config(awsRegion, primaryKey, tableName)
-	ssm := new(runsimaws.Ssm)
-	ssm.Config(awsRegion)
-
 	if err = Slack.State.GetState("Slack", Slack); err != nil {
-		return err
-	}
-
-	token, err := ssm.GetParameter(slackAppTokenID)
-	if err != nil {
 		return err
 	}
 
@@ -43,14 +36,28 @@ func (Slack *Integration) ConfigFromState(awsRegion, slackAppTokenID string) (er
 	if *Slack.ChannelID == "" {
 		return errors.New("ErrorMissingAttribute: SlackChannel")
 	}
+
+	ssm := new(runsimaws.Ssm)
+	ssm.Config(awsRegion)
+	token, err := ssm.GetParameter(slackAppTokenID)
+	if err != nil {
+		return err
+	}
+
 	Slack.Client = slack.New(token)
-	return nil
+	return
 }
 
 func (Slack *Integration) ConfigFromScratch(awsRegion, channelId, slackAppTokenID string) (err error) {
 	Slack.IntegrationType = aws.String("Slack")
 	Slack.MessageTS = aws.String("")
 	Slack.ChannelID = &channelId
+	Slack.State = new(runsimaws.DdbTable)
+	Slack.State.Config(awsRegion, primaryKey, tableName)
+
+	if err = Slack.State.PutState(Slack); err != nil {
+		return
+	}
 
 	ssm := new(runsimaws.Ssm)
 	ssm.Config(awsRegion)
@@ -61,7 +68,9 @@ func (Slack *Integration) ConfigFromScratch(awsRegion, channelId, slackAppTokenI
 }
 
 func (Slack *Integration) PushSlackCmdReply(message, responseUrl string) (err error) {
-	payload, err := json.Marshal(struct{Text string `json:"text"`}{Text: message})
+	payload, err := json.Marshal(struct {
+		Text string `json:"text"`
+	}{Text: message})
 	if err != nil {
 		return err
 	}
