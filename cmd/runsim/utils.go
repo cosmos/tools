@@ -32,25 +32,24 @@ var (
 )
 
 func configIntegration() {
-	var err error
 	awsRegion = os.Getenv("AWS_REGION")
 	if awsRegion == "" {
 		awsRegion = "us-east-1"
 	}
 
 	if notifyGithub {
-		if err = github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
+		if err := github.ConfigFromState(awsRegion, ghAppTokenID); err != nil {
 			log.Printf("ERROR: github.ConfigFromState: %v", err)
 			uploadLogAndExit()
 		}
-		if err = github.SetActiveCheckRun(); err != nil {
+		if err := github.SetActiveCheckRun(); err != nil {
 			log.Printf("ERROR: github.SetActiveCheckRun: %v", err)
 			uploadLogAndExit()
 		}
 	}
 
 	if notifySlack {
-		if err = slack.ConfigFromState(awsRegion, slackAppTokenID); err != nil {
+		if err := slack.ConfigFromState(awsRegion, slackAppTokenID); err != nil {
 			log.Printf("ERROR: slack.ConfigFromState: %v", err)
 			uploadLogAndExit()
 		}
@@ -79,7 +78,6 @@ func publishResults(okSeeds, failedSeeds, exports []string) {
 	} else {
 		pushNotification(len(failedSeeds) > 0, buildMessage(objUrls))
 	}
-	log.Printf("Notification pushed.")
 	uploadLogAndExit()
 }
 

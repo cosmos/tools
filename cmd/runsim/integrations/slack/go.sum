@@ -3,13 +3,11 @@ github.com/aws/aws-lambda-go v1.13.1 h1:qVIOD3UrEUo4amwgEBu6AI0CfnBsp71XJEYU05Rb
 github.com/aws/aws-lambda-go v1.13.1/go.mod h1:z4ywteZ5WwbIEzG0tXizIAUlUwkTNNknX4upd5Z5XJM=
 github.com/aws/aws-sdk-go v1.23.2 h1:QSdnxlC29v6b2+C6mkriHhElh02ZlsRBoPX15SOZ6jU=
 github.com/aws/aws-sdk-go v1.23.2/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
-github.com/aws/aws-sdk-go v1.23.14 h1:fgBFQhTYvfckw0HH9e1W/l70PX6n3InFEQgrc9hNCRk=
-github.com/aws/aws-sdk-go v1.23.14/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820231237-3eb40b7e2305/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
-github.com/cosmos/tools/lib/runsimaws v0.0.0-20190904044037-7c6ef3f36127 h1:l7zy6N5zFfhoQyYqxdIypUZ4o0DRwojA+9EP8QfHvbg=
-github.com/cosmos/tools/lib/runsimaws v0.0.0-20190904044037-7c6ef3f36127/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
-github.com/cosmos/tools/lib/runsimslack v0.0.0-20190904044037-7c6ef3f36127 h1:PYcuzzZvRvbkeDyEe/evm3PdIMLzp9wQQdf4tdPupyY=
-github.com/cosmos/tools/lib/runsimslack v0.0.0-20190904044037-7c6ef3f36127/go.mod h1:SaX6toTGGI2ysRyX9GGabbjSok/FbwemfFsAQO+midY=
+github.com/cosmos/tools/lib/runsimaws v0.0.0-20190905194523-8c9a8b61871f h1:3bg0q4AuABzHuCaPbhRiRKLCSvkk97OqloJqK7VJu9M=
+github.com/cosmos/tools/lib/runsimaws v0.0.0-20190905194523-8c9a8b61871f/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
+github.com/cosmos/tools/lib/runsimslack v0.0.0-20190905194523-8c9a8b61871f h1:aZAwpPGrcOAm2WQyI7dRzVTv/4N9jR3aGdYWuTHzS14=
+github.com/cosmos/tools/lib/runsimslack v0.0.0-20190905194523-8c9a8b61871f/go.mod h1:SaX6toTGGI2ysRyX9GGabbjSok/FbwemfFsAQO+midY=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
