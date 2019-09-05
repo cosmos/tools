@@ -186,7 +186,7 @@ func main() {
 	}
 
 	if len(msgQueue) > 1 {
-		sendSqsMsg(msgQueue)
+		sendSqsMsg(msgQueue, fmt.Sprintf("sim-%s-", integrationType))
 	}
 }
 

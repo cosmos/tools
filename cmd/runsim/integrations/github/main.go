@@ -19,17 +19,17 @@ import (
 const (
 	// Security token IDs
 	ssmGhAppTokenId  = "github-sim-app-key"
-	ssmCircleTokenId = ""
+	ssmCircleTokenId = "circle-token-sim"
 
 	// Github app parameters
 	startSimCmd      = "Start sim"
 	startSimCmdDev	 = "Start sim dev"
 	ghCheckName      = "Long sim"
-	ghConclusionFail = "failure" // The final conclusion of a failed github check
-
-	// GitHub app installation details
 	appIntegrationId  = "30867"
 	appInstallationId = "997580"
+
+	// The value to use in the conclusion field of a github check in case of failure.
+	ghConclusionFail = "failure"
 
 	// DynamoDB attribute and table names
 	awsRegion = "us-east-1"
@@ -76,12 +76,6 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
 	}
 
-	// Same check for a slack simulation
-	if _ = ddb.GetState("Slack", github); github.IntegrationType != nil {
-		// TODO: send this response as a PR comment or some other way to notify the user
-		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
-	}
-
 	var ghEvent GithubEventPayload
 	if err = json.Unmarshal([]byte(request.Body), &ghEvent); err != nil {
 		log.Printf("INFO: github request: %+v", request.Body)
@@ -101,12 +95,15 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return buildProxyResponse(200, fmt.Sprintf("INFO: not a sim command")), nil
 	}
 
-	if err = github.ConfigFromScratch(awsRegion, ssmGhAppTokenId, ghEvent.Repo.Owner.Login, ghEvent.Repo.Name,
-		ghCheckName, appInstallationId, appIntegrationId, strconv.Itoa(ghEvent.Issue.Number)); err != nil {
+	err = github.ConfigFromScratch(awsRegion, ssmGhAppTokenId, ghEvent.Repo.Owner.Login, ghEvent.Repo.Name,
+		ghCheckName, appInstallationId, appIntegrationId, strconv.Itoa(ghEvent.Issue.Number))
+	if err != nil {
+		cleanup(github)
 		return buildProxyResponse(500, "ERROR: github.ConfigFromScratch"), err
 	}
 
 	if err = github.CreateNewCheckRun(); err != nil {
+		cleanup(github)
 		return buildProxyResponse(500, "ERROR: github.CreateNewCheckRun"), err
 	}
 
@@ -114,6 +111,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	ssm.Config(awsRegion)
 	circleToken, err := ssm.GetParameter(ssmCircleTokenId)
 	if err != nil {
+		cleanup(github)
 		response = buildProxyResponse(500, "ERROR: ssm.GetParameter")
 		return
 	}
@@ -128,10 +126,13 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		if ghErr != nil {
 			log.Printf("ERROR: github.ConcludeCheckRun: %v", err)
 		}
+		cleanup(github)
 		return buildProxyResponse(500, "ERROR: triggerCircleciJob"), err
 	}
 
-	err = github.UpdateCheckRunStatus(github.ActiveCheckRun.Status, aws.String("Image build in progress. "))
+	msg := fmt.Sprintf("Image build in progress. [CircleCI](https://circleci.com/gh/tendermint/images/tree/%s)",
+		amiVersion)
+	err = github.UpdateCheckRunStatus(github.ActiveCheckRun.Status, &msg)
 
 	return buildProxyResponse(200, fmt.Sprint("INFO: Init attempt finished")), err
 }
@@ -143,7 +144,8 @@ func triggerCircleciJob(circleToken string, payload CircleApiPayload) (err error
 	}
 
 	var request *http.Request
-	url := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s", circleToken)
+	url := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s",
+		circleToken)
 	if request, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload)); err != nil {
 		return
 	}
@@ -161,6 +163,13 @@ func buildProxyResponse(responseCode int, message string) events.APIGatewayProxy
 	return events.APIGatewayProxyResponse{
 		StatusCode: responseCode,
 		Body:       message,
+	}
+}
+
+// Function used if the program crashes out. Attempts to remove the state information from dynamoDB
+func cleanup(github *runsimgh.Integration) {
+	if err := github.DeleteState(); err != nil {
+		log.Println(err)
 	}
 }
 

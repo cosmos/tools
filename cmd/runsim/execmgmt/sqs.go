@@ -10,10 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
-const (
-	queueNamePrefix = "gaia-sim-"
-)
-
 var sessionSQS = sqs.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
 
 func sendBatch(batchRequestEntries []*sqs.SendMessageBatchRequestEntry, queues *sqs.ListQueuesOutput) {
@@ -36,7 +32,7 @@ func removeEmpties(batch []*sqs.SendMessageBatchRequestEntry) []*sqs.SendMessage
 	return newBatch
 }
 
-func sendSqsMsg(instanceIndex []int) {
+func sendSqsMsg(instanceIndex []int, queueNamePrefix string) {
 	queues, err := sessionSQS.ListQueues(&sqs.ListQueuesInput{QueueNamePrefix: aws.String(queueNamePrefix)})
 	if err != nil {
 		log.Fatalf("%v", err)

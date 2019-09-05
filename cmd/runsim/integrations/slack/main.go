@@ -167,10 +167,6 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	// Try to retrieve sim state from database. Success indicates another sim is still running
 	ddb := new(runsimaws.DdbTable)
 	ddb.Config(awsRegion, primaryKey, simStateTable)
-	if _ = ddb.GetState("GitHub", slack); slack.IntegrationType != nil {
-		response.Body = "INFO: another simulation is in progress"
-		return
-	}
 	if _ = ddb.GetState("Slack", slack); slack.IntegrationType != nil {
 		response.Body = "INFO: another simulation is in progress"
 		return

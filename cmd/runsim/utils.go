@@ -18,7 +18,8 @@ import (
 	"github.com/cosmos/tools/lib/runsimslack"
 )
 
-const queueNamePrefix = "gaia-sim-"
+const sqsGithub = "sim-github-"
+const sqsSlack = "sim-slack-"
 
 var (
 	// file paths for the compressed logs
@@ -78,6 +79,7 @@ func publishResults(okSeeds, failedSeeds, exports []string) {
 	} else {
 		pushNotification(len(failedSeeds) > 0, buildMessage(objUrls))
 	}
+	log.Printf("Notification pushed.")
 	uploadLogAndExit()
 }
 
@@ -163,7 +165,6 @@ func compressLogs(okSeeds, failedSeeds, exportsPaths []string) (err error) {
 
 // compresses one or many files into a single zip archive.
 func zipFiles(filename string, files []string) (err error) {
-	log.Println(filename)
 	zipFile, err := os.Create(filename)
 	if err != nil {
 		return
@@ -226,8 +227,8 @@ func addFileToZip(zipWriter *zip.Writer, fileName string) (err error) {
 }
 
 func pushNotification(failed bool, message string) {
-	last, lastCheckErr := checkIfLast()
 	if notifySlack {
+		last, _ := checkIfLast(sqsSlack)
 		if err := slack.PostMessage(message); err != nil {
 			log.Printf("ERROR: slack.PostMessage: %v", err)
 		}
@@ -235,9 +236,12 @@ func pushNotification(failed bool, message string) {
 			if err := slack.PostMessage("Simulation is finished!"); err != nil {
 				log.Printf("ERROR: slack.PostMessage: %v", err)
 			}
-			_ = slack.DeleteState()
+			if err := slack.DeleteState(); err != nil {
+				log.Printf("ERROR: slack.DeleteState: %v", err)
+			}
 		}
 	} else if notifyGithub { // Using this else to avoid any nasty bugs
+		last, lastCheckErr := checkIfLast(sqsGithub)
 		conclusion := "success"
 		if lastCheckErr != nil {
 			log.Printf("ERROR: checkIfLast: %v", lastCheckErr)
@@ -250,12 +254,13 @@ func pushNotification(failed bool, message string) {
 				log.Printf("ERROR: github.UpdateCheckRunStatus: %v", err)
 			}
 		} else {
-			err := github.ConcludeCheckRun(&message, &conclusion)
-			if err != nil {
+			if err := github.ConcludeCheckRun(&message, &conclusion); err != nil {
 				log.Printf("ERROR: github.ConcludeCheckRun: %v", err)
 			}
 			if last {
-				_ = github.DeleteState()
+				if err := github.DeleteState(); err != nil {
+					log.Printf("ERROR: github.DeleteState: %v", err)
+				}
 			}
 		}
 	}
@@ -295,30 +300,33 @@ func buildMessage(objUrls map[string]string) (msg string) {
 
 // checkIfLast will check the SQS queue for any messages.
 // If there are no messages left, that means this is the last instance running a simulation. Return true.
-func checkIfLast() (bool, error) {
+func checkIfLast(queueNamePrefix string) (bool, error) {
 	svc := sqs.New(session.Must(session.NewSession(&aws.Config{Region: aws.String(awsRegion)})))
-
 	queues, err := svc.ListQueues(&sqs.ListQueuesInput{QueueNamePrefix: aws.String(queueNamePrefix)})
 	if err != nil {
 		return false, err
 	}
 
-	// TODO: add attributes that identify which simulation they belong to. Enables multiple sims to run in parallel
-	receiveMsgOutput, err := svc.ReceiveMessage(&sqs.ReceiveMessageInput{
-		QueueUrl:            queues.QueueUrls[0],
-		MaxNumberOfMessages: aws.Int64(1),
-	})
-	if err != nil {
-		return false, err
-	}
-
-	if len(receiveMsgOutput.Messages) > 0 {
-		// Delete one message to indicate this instance is finished
-		_, _ = svc.DeleteMessage(&sqs.DeleteMessageInput{
-			QueueUrl:      queues.QueueUrls[0],
-			ReceiptHandle: receiveMsgOutput.Messages[0].ReceiptHandle,
+	if len(queues.QueueUrls) > 0 {
+		// TODO: add attributes that identify which simulation they belong to. Enables multiple sims to run in parallel
+		receiveMsgOutput, err := svc.ReceiveMessage(&sqs.ReceiveMessageInput{
+			QueueUrl:            queues.QueueUrls[0],
+			MaxNumberOfMessages: aws.Int64(1),
 		})
-		return false, err
+		if err != nil {
+			return false, err
+		}
+
+		if len(receiveMsgOutput.Messages) > 0 {
+			// Delete one message to indicate this instance is finished
+			_, _ = svc.DeleteMessage(&sqs.DeleteMessageInput{
+				QueueUrl:      queues.QueueUrls[0],
+				ReceiptHandle: receiveMsgOutput.Messages[0].ReceiptHandle,
+			})
+			return false, err
+		}
+	} else {
+		return false, errors.New("sqs queue not found")
 	}
 	return true, nil
 }
