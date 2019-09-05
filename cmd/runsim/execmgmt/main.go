@@ -283,8 +283,13 @@ func buildRunsimCommand(seeds, hostId, simId string) string {
 }
 
 func buildInitMessage() string {
-	return fmt.Sprintf("*ID #%s.* SDK hash/tag/branch: `%s`. <%s|Build URL>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`",
-		buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
+	if integrationType == slackIntegrationType {
+		return fmt.Sprintf("*ID #%s*\n SDK hash/tag/branch: `%s`\n <%s|Build URL>\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`\n",
+			buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
+	} else {
+		return fmt.Sprintf("**ID #%s.**\n SDK commit: `%s`\n [Build URL](%s)\nblocks:\t`%s`\nperiod:\t`%s`\nseeds:\t`%s`\n",
+			buildNum, sdkGitRev, buildUrl, blocks, period, seeds)
+	}
 }
 
 // Function used if the program crashes out. Attempts to remove the state information from dynamoDB
