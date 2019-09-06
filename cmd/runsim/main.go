@@ -38,7 +38,7 @@ var (
 		977367484, 491163361, 424254581, 673398983,
 	}
 	seedOverrideList = ""
-	results          chan *Seed
+	results          chan Seed
 
 	// goroutine-safe process map
 	procs map[int]*os.Process
@@ -133,15 +133,14 @@ func main() {
 		}
 	}
 
-	seedQueue := make(chan *Seed, len(seeds))
+	seedQueue := make(chan Seed, len(seeds))
 	for _, seed := range seeds {
-		seedQueue <- &Seed{
+		seedQueue <- Seed{
 			Num:          seed,
 			Stderr:       filepath.Join(tempDir, buildLogFileName(seed)+".stderr"),
 			Stdout:       filepath.Join(tempDir, buildLogFileName(seed)+".stdout"),
 			ExportParams: filepath.Join(tempDir, fmt.Sprintf("sim_params-%d.json", seed)),
 			ExportState:  filepath.Join(tempDir, fmt.Sprintf("sim_state-%d.json", seed)),
-			Failed:       false,
 		}
 	}
 	close(seedQueue)
@@ -155,7 +154,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	results = make(chan *Seed, len(seeds))
+	results = make(chan Seed, len(seeds))
 	go func() {
 		<-sigs
 		fmt.Println()
@@ -225,11 +224,12 @@ wait:
 	os.Exit(0)
 }
 
-func worker(id int, seeds <-chan *Seed, results chan *Seed) {
+func worker(id int, seeds <-chan Seed, results chan Seed) {
 	log.Printf("[W%d] Worker is up and running", id)
+	failed := false
 	for seed := range seeds {
 		if err := spawnProcess(id, seed); err != nil {
-			seed.Failed = true
+			failed = true
 			log.Printf("[W%d] Seed %d: FAILED", id, seed.Num)
 			log.Printf("To reproduce run: %s",
 				buildCmdString(testname, blocks, period, genesis, seed.ExportState, seed.ExportParams, seed.Num))
@@ -239,12 +239,19 @@ func worker(id int, seeds <-chan *Seed, results chan *Seed) {
 				panic("halting simulations")
 			}
 		}
-		results <- seed
+		results <- Seed{
+			Num:          seed.Num,
+			Stdout:       seed.Stdout,
+			Stderr:       seed.Stderr,
+			ExportParams: seed.ExportParams,
+			ExportState:  seed.ExportState,
+			Failed:       failed,
+		}
 	}
 	log.Printf("[W%d] no seeds left, shutting down", id)
 }
 
-func spawnProcess(workerID int, seed *Seed) (err error) {
+func spawnProcess(workerID int, seed Seed) (err error) {
 	stderrFile, err := os.Create(seed.Stderr)
 	if err != nil {
 		if notifyGithub || notifySlack {
