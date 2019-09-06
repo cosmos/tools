@@ -7,19 +7,32 @@ executors:
     environment:
       GO111MODULE: "on"
 
+commands:
+  build:
+    parameters:
+      app_name:
+        type: string
+    steps:
+      - run:
+          name: Build << parameters.app_name >> binary
+          command: |
+            cd cmd/<< parameters.app_name >> || exit 1
+            go build
 jobs:
   build:
     executor: golang
     steps:
       - checkout
-      - run:
-          name: "Build binaries"
-          command: |
-            go build ./cmd/clog
-            go build ./cmd/runsim
-            go build ./cmd/slack
-            go build ./cmd/github
-            go build ./cmd/execmgmt
+      - build:
+          app_name: clog
+      - build:
+          app_name: runsim
+      - build:
+          app_name: execmgmt
+      - build:
+          app_name: slack
+      - build:
+          app_name: github
 
 workflows:
   version: 2
