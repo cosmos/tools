@@ -47,24 +47,6 @@ func (table *DdbTable) PutState(data interface{}) (err error) {
 	return
 }
 
-func (table *DdbTable) UpdateState(key string, data interface{}) (err error) {
-	attributes, err := dynamodbattribute.MarshalMap(data)
-	if err != nil {
-		return
-	}
-	_, err = table.svc.UpdateItem(&ddb.UpdateItemInput{
-		Key:       map[string]*ddb.AttributeValue{*table.PrimaryKey: {S: aws.String(key)}},
-		TableName: table.Name,
-		ExpressionAttributeNames: map[string]*string{
-			"#s": aws.String("Status"),
-			"#n": aws.String("NumInstances"),
-		},
-		UpdateExpression:          aws.String("set #s = :s, #n = :n"),
-		ExpressionAttributeValues: attributes,
-	})
-	return
-}
-
 func (table *DdbTable) DeleteState(key string) (err error) {
 	_, err = table.svc.DeleteItem(&ddb.DeleteItemInput{
 		Key:       map[string]*ddb.AttributeValue{*table.PrimaryKey: {S: aws.String(key)}},
