@@ -46,7 +46,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	// Try to retrieve sim state from database. Success indicates another sim is still running
 	if _ = ddb.GetState("GitHub", github); github.IntegrationType != nil {
 		// TODO: send this response as a PR comment or some other way to notify the user
-		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
+		return buildProxyResponse(200, "INFO: another sim is already in progress"), nil
 	}
 
 	var ghEvent common.GithubEventPayload
@@ -85,8 +85,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	circleToken, err := ssm.GetParameter(ssmCircleTokenId)
 	if err != nil {
 		cleanup(github)
-		response = buildProxyResponse(500, "ERROR: ssm.GetParameter")
-		return
+		return buildProxyResponse(500, "ERROR: ssm.GetParameter"), err
 	}
 
 	payload := new(common.CircleApiPayload)

@@ -49,14 +49,14 @@ func parseSlackRequest(slashCmdPayload string) (payload common.CircleApiPayload,
 		if match, err = url.PathUnescape(match); err != nil {
 			return
 		}
-		if match == "" {
+
+		switch match {
+		case "":
 			return
-		}
-		// First part of the slash command is the command name
-		if match == slashCmd {
+		case slashCmd:
 			payload.Revision = "ami-gaia-sim"
 			continue
-		} else if match == slashCmdDev {
+		case slashCmdDev:
 			payload.Revision = "master"
 			continue
 		}
@@ -108,7 +108,7 @@ func verifySlackRequest(slackSig, slackTimestamp, slackSecret, requestBody strin
 	if hmac.Equal([]byte(slackSig), []byte("v0="+hex.EncodeToString(requestHash.Sum(nil)))) {
 		return
 	}
-	return errors.New("failed")
+	return errors.New("slack request verification failed")
 }
 
 func triggerCircleciJob(circleToken string, payload common.CircleApiPayload) (err error) {

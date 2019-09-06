@@ -3,6 +3,7 @@ github.com/aws/aws-lambda-go v1.13.1 h1:qVIOD3UrEUo4amwgEBu6AI0CfnBsp71XJEYU05Rb
 github.com/aws/aws-lambda-go v1.13.1/go.mod h1:z4ywteZ5WwbIEzG0tXizIAUlUwkTNNknX4upd5Z5XJM=
 github.com/aws/aws-sdk-go v1.23.2 h1:QSdnxlC29v6b2+C6mkriHhElh02ZlsRBoPX15SOZ6jU=
 github.com/aws/aws-sdk-go v1.23.2/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
+github.com/cosmos/tools v0.0.0-20190905194523-8c9a8b61871f h1:OjwXlh6Hb6kjtlrsoNXIKVHpPptJ4RQwbQuSEP2AU0s=
 github.com/cosmos/tools/lib/runsimaws v0.0.0-20190820231237-3eb40b7e2305/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
 github.com/cosmos/tools/lib/runsimaws v0.0.0-20190905194523-8c9a8b61871f h1:3bg0q4AuABzHuCaPbhRiRKLCSvkk97OqloJqK7VJu9M=
 github.com/cosmos/tools/lib/runsimaws v0.0.0-20190905194523-8c9a8b61871f/go.mod h1:TjFAfA1RR2PkFYnlve4C3AWE9iLTSkWxvVTrySaCTWo=
