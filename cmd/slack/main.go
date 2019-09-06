@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/cosmos/tools/cmd/lambda/common"
 	"log"
 	"math"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/cosmos/tools/lib/common"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/cosmos/tools/lib/runsimslack"
 )

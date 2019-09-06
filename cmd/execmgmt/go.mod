@@ -1,6 +1,6 @@
-module github.com/cosmos/tools/cmd/runsim/execmgmt
+module github.com/cosmos/tools/cmd/execmgmt
 
-go 1.12
+go 1.13
 
 require (
 	github.com/aws/aws-sdk-go v1.23.14

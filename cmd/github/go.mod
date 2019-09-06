@@ -1,6 +1,6 @@
-module github.com/cosmos/tools/cmd/lambda/github
+module github.com/cosmos/tools/cmd/github
 
-go 1.12
+go 1.13
 
 require (
 	github.com/aws/aws-lambda-go v1.13.1
