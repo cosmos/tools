@@ -37,22 +37,16 @@ var (
 		29892989, 30123012, 47284728, 7601778, 8090485,
 		977367484, 491163361, 424254581, 673398983,
 	}
-	seedOverrideList = ""
-	results          chan Seed
 
 	// goroutine-safe process map
 	procs map[int]*os.Process
 	mutex *sync.Mutex
 
 	// command line arguments and options
-	jobs                                  = runtime.GOMAXPROCS(0)
-	pkgName                               = "./simapp"
-	genesis, blocks, period, testname     string
-	simId, hostId                         string
-	notifySlack, notifyGithub, exitOnFail bool
+	jobs     = runtime.GOMAXPROCS(0)
+	testname string
 
 	// log stuff
-	logObjPrefix  string
 	runsimLogFile *os.File
 )
 
@@ -69,27 +63,10 @@ func init() {
 	log.SetPrefix("")
 	log.SetFlags(0)
 
+	initFlags()
+
 	procs = map[int]*os.Process{}
 	mutex = &sync.Mutex{}
-
-	flag.StringVar(&genesis, "Genesis", "", "genesis file path")
-	flag.StringVar(&pkgName, "SimAppPkg", "github.com/cosmos/cosmos-sdk/simapp", "sim app package")
-	flag.StringVar(&simId, "SimId", "", "long sim ID")
-	flag.StringVar(&hostId, "HostId", "", "long sim host ID")
-	flag.StringVar(&seedOverrideList, "Seeds", "", "override default seeds with comma-separated list")
-	flag.StringVar(&logObjPrefix, "LogObjPrefix", "", "the S3 object prefix used when uploading logs")
-	flag.BoolVar(&notifySlack, "Slack", false, "report results to Slack channel")
-	flag.BoolVar(&notifyGithub, "Github", false, "update github check")
-	flag.BoolVar(&exitOnFail, "ExitOnFail", false, "exit on fail during multi-sim, print error")
-	flag.IntVar(&jobs, "Jobs", jobs, "number of parallel processes")
-
-	flag.Usage = func() {
-		_, _ = fmt.Fprintf(flag.CommandLine.Output(),
-			"Usage: %s [-Jobs maxprocs] [-ExitOnFail] [-Seeds comma-separated-seed-list] [-Genesis file-path] "+
-				"[-SimAppPkg file-path] [-Github] [-Slack] [-LogObjPrefix string] [blocks] [period] [testname]\n"+
-				"Run simulations in parallel\n", filepath.Base(os.Args[0]))
-		flag.PrintDefaults()
-	}
 }
 
 func main() {
@@ -154,7 +131,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	results = make(chan Seed, len(seeds))
+	results := make(chan Seed, len(seeds))
 	go func() {
 		<-sigs
 		fmt.Println()
@@ -226,8 +203,8 @@ wait:
 
 func worker(id int, seeds <-chan Seed, results chan Seed) {
 	log.Printf("[W%d] Worker is up and running", id)
-	failed := false
 	for seed := range seeds {
+		failed := false
 		if err := spawnProcess(id, seed); err != nil {
 			failed = true
 			log.Printf("[W%d] Seed %d: FAILED", id, seed.Num)

@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/cosmos/tools/cmd/lambda/common"
 	"github.com/cosmos/tools/lib/runsimaws"
 	"github.com/cosmos/tools/lib/runsimgh"
 )
@@ -37,34 +38,6 @@ const (
 	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
 )
 
-type CircleApiPayload struct {
-	Revision        string `json:"revision"`
-	BuildParameters struct {
-		CommitHash      string `json:"gaia-commit-hash"`
-		IntegrationType string `json:"integration-type"`
-	} `json:"parameters"`
-}
-
-type GithubEventPayload struct {
-	Issue struct {
-		Number int `json:"number"`
-		Pr     struct {
-			Url string `json:"url,omitempty"`
-		} `json:"pull_request,omitempty"`
-	} `json:"issue"`
-
-	Comment struct {
-		Body string `json:"body"`
-	} `json:"comment"`
-
-	Repo struct {
-		Name  string `json:"name"`
-		Owner struct {
-			Login string `json:"login"`
-		} `json:"owner"`
-	} `json:"repository"`
-}
-
 func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayProxyResponse, err error) {
 	ddb := new(runsimaws.DdbTable)
 	ddb.Config(awsRegion, primaryKey, simStateTable)
@@ -76,7 +49,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return buildProxyResponse(200, "INFO: another sim is already in progress"), err
 	}
 
-	var ghEvent GithubEventPayload
+	var ghEvent common.GithubEventPayload
 	if err = json.Unmarshal([]byte(request.Body), &ghEvent); err != nil {
 		log.Printf("INFO: github request: %+v", request.Body)
 		return buildProxyResponse(500, "ERROR: unmarshal github request"), err
@@ -116,7 +89,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return
 	}
 
-	payload := new(CircleApiPayload)
+	payload := new(common.CircleApiPayload)
 	payload.Revision = amiVersion
 	payload.BuildParameters.CommitHash = github.PR.Head.GetSHA()
 	payload.BuildParameters.IntegrationType = "github"
@@ -137,7 +110,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	return buildProxyResponse(200, fmt.Sprint("INFO: Init attempt finished")), err
 }
 
-func triggerCircleciJob(circleToken string, payload CircleApiPayload) (err error) {
+func triggerCircleciJob(circleToken string, payload common.CircleApiPayload) (err error) {
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return

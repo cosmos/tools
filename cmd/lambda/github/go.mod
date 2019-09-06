@@ -1,4 +1,4 @@
-module github.com/cosmos/tools/cmd/runsim/integrations/github
+module github.com/cosmos/tools/cmd/lambda/github
 
 go 1.12
 

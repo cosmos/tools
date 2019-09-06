@@ -33,7 +33,12 @@ func removeEmpties(batch []*sqs.SendMessageBatchRequestEntry) []*sqs.SendMessage
 }
 
 func sendSqsMsg(instanceIndex []int, queueNamePrefix string) {
-	queues, err := sessionSQS.ListQueues(&sqs.ListQueuesInput{QueueNamePrefix: aws.String(queueNamePrefix)})
+	queues, err := sessionSQS.ListQueues(
+		&sqs.ListQueuesInput{
+			QueueNamePrefix: aws.String(queueNamePrefix),
+		},
+	)
+
 	if err != nil {
 		log.Fatalf("%v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cosmos/tools/cmd/lambda/common"
 	"log"
 	"math"
 	"net/http"
@@ -39,17 +40,7 @@ const (
 	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
 )
 
-type CircleApiPayload struct {
-	Revision        string `json:"revision"`
-	BuildParameters struct {
-		CommitHash      string `json:"gaia-commit-hash"`
-		Blocks          string `json:"blocks"`
-		Genesis         string `json:"genesis"`
-		IntegrationType string `json:"integration-type"`
-	} `json:"parameters"`
-}
-
-func parseSlackRequest(slashCmdPayload string) (payload CircleApiPayload, respUrl string, err error) {
+func parseSlackRequest(slashCmdPayload string) (payload common.CircleApiPayload, respUrl string, err error) {
 	reFields := regexp.MustCompile(`^token.*?&command=(.*?)&text=(.*?)&response_url=(.*?)&`)
 	reBlocks := regexp.MustCompile(`^[1-9][0-9]{0,3}$`)
 
@@ -120,7 +111,7 @@ func verifySlackRequest(slackSig, slackTimestamp, slackSecret, requestBody strin
 	return errors.New("failed")
 }
 
-func triggerCircleciJob(circleToken string, payload CircleApiPayload) (err error) {
+func triggerCircleciJob(circleToken string, payload common.CircleApiPayload) (err error) {
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		return
