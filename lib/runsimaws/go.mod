@@ -1,9 +1,9 @@
 module github.com/cosmos/tools/lib/runsimaws
 
-go 1.12
+go 1.13
 
 require (
-	github.com/aws/aws-sdk-go v1.23.2
+	github.com/aws/aws-sdk-go v1.23.17
 	github.com/stretchr/testify v1.4.0 // indirect
-	golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7 // indirect
+	golang.org/x/net v0.0.0-20190827160401-ba9fcec4b297 // indirect
 )

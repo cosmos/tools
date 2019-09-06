@@ -6,7 +6,7 @@ type CircleApiPayload struct {
 	BuildParameters BuildParameters `json:"parameters"`
 }
 
-// Contains the parameters for the CircleCI build jon
+// Contains the parameters for the CircleCI build json
 type BuildParameters struct {
 	CommitHash  string `json:"commit-hash"`
 	Blocks      string `json:"blocks"`
