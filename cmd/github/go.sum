@@ -5,8 +5,8 @@ github.com/aws/aws-sdk-go v1.23.17 h1:IGNAvtR7ckMEHhy+ObG9xw6DFqEE4Ual0LYXsVTZSL
 github.com/aws/aws-sdk-go v1.23.17/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/bradleyfalzon/ghinstallation v0.1.2 h1:9fdqVadlvEX/EUts5/aIGvx2ujKnGNIMcuCuUrM6s6Q=
 github.com/bradleyfalzon/ghinstallation v0.1.2/go.mod h1:VQsLlCoNa54/CNXcc2DuCfNZrZxqQcyPeqKUugF/2h8=
-github.com/cosmos/tools/lib/common v0.0.0-20190906203433-f04a321b01ce h1:3zdlWHlATNhX1cOVUgmCOSNH6uq7rG6kIK+4WFI/kmE=
-github.com/cosmos/tools/lib/common v0.0.0-20190906203433-f04a321b01ce/go.mod h1:5Cvw1V02PZrSDDuZOmDjwQ+MFVIGS4LJAlQET5sKf6I=
+github.com/cosmos/tools/lib/common v1.0.1 h1:6aQ7HjG48NN80xEz9k7dax6qEXPF1/mGVOCbA/H8s+Y=
+github.com/cosmos/tools/lib/common v1.0.1/go.mod h1:5Cvw1V02PZrSDDuZOmDjwQ+MFVIGS4LJAlQET5sKf6I=
 github.com/cosmos/tools/lib/runsimaws v1.0.0 h1:IJt4sXA4Hqqm7KuOxfWduiZS02KMkrQTDt/PPiwmX1o=
 github.com/cosmos/tools/lib/runsimaws v1.0.0/go.mod h1:asuuzE1jU1M5jO8QGlgB4kUexLDlxkUwEU5z8NgbkdE=
 github.com/cosmos/tools/lib/runsimgh v1.0.0 h1:MoVUp+MT13EHYuNhDpcmnKbYsn9dCAvA6ChVZgtboGA=
