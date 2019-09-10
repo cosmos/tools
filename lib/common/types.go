@@ -2,7 +2,7 @@ package common
 
 // Structure used to generate the json payload for the CircleCI api call
 type CircleApiPayload struct {
-	Revision        string          `json:"revision"`
+	Branch          string          `json:"branch"`
 	BuildParameters BuildParameters `json:"parameters"`
 }
 
