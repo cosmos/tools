@@ -31,11 +31,11 @@ const (
 	ssmSlackChannelId  = "slack-channel-id"
 	ssmSlackAppTokenId = "slack-app-key"
 
-	slashCmd = "/sim_start"
+	slashCmd    = "/sim_start"
 	slashCmdDev = "/dev_sim_start"
 
 	// DynamoDB attribute and table names
-	awsRegion = "us-east-1"
+	awsRegion     = "us-east-1"
 	simStateTable = "SimulationState" // name of the dynamodb table where details from running simulations are stored
 	primaryKey    = "IntegrationType" // primary partition key used by the sim state table
 )
@@ -54,10 +54,10 @@ func parseSlackRequest(slashCmdPayload string) (payload common.CircleApiPayload,
 		case "":
 			return
 		case slashCmd:
-			payload.Revision = "ami-gaia-sim"
+			payload.Branch = "ami-gaia-sim"
 			continue
 		case slashCmdDev:
-			payload.Revision = "master"
+			payload.Branch = "master"
 			continue
 		}
 
@@ -118,15 +118,17 @@ func triggerCircleciJob(circleToken string, payload common.CircleApiPayload) (er
 	}
 
 	var request *http.Request
-	circleUrl := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s", circleToken)
-	if request, err = http.NewRequest("POST", circleUrl, bytes.NewBuffer(jsonPayload)); err != nil {
+	url := fmt.Sprintf("https://circleci.com/api/v2/project/gh/tendermint/images/pipeline?circle-token=%s",
+		circleToken)
+	if request, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload)); err != nil {
 		return
 	}
+
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Accept", "*/*") // without this header, CircleCI doesn't return valid JSON...
 
 	var client = &http.Client{Timeout: 2 * time.Second}
 	_, err = client.Do(request)
+
 	return
 }
 
@@ -142,7 +144,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		response.Body = fmt.Sprintf("ERROR: parseSlackRequest: %v", err)
 		return
 	}
-	if circlePayload.Revision == "" {
+	if circlePayload.Branch == "" {
 		response.Body = "ERROR: slash command is missing parameters"
 		return
 	}
@@ -192,7 +194,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 		return
 	}
 
-	message := fmt.Sprintf("Simulation has started! <https://circleci.com/gh/tendermint/images/tree/%s|CircleCI>", circlePayload.Revision)
+	message := fmt.Sprintf("Simulation has started! <https://circleci.com/gh/tendermint/images/tree/%s|CircleCI>", circlePayload.Branch)
 	if err = slack.PostMessage(message); err != nil {
 		response.Body = fmt.Sprintf("ERROR: slack.PostMessage: %v", err)
 		return

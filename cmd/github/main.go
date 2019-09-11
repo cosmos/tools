@@ -26,8 +26,8 @@ const (
 	startSimCmd      = "Start sim"
 	startSimCmdDev	 = "Start sim dev"
 	ghCheckName      = "Long sim"
-	appIntegrationId  = "30867"
-	appInstallationId = "997580"
+	appIntegrationId  = "40845"
+	appInstallationId = "1872636"
 
 	// The value to use in the conclusion field of a github check in case of failure.
 	ghConclusionFail = "failure"
@@ -89,7 +89,7 @@ func handler(request events.APIGatewayProxyRequest) (response events.APIGatewayP
 	}
 
 	payload := new(common.CircleApiPayload)
-	payload.Revision = amiVersion
+	payload.Branch = amiVersion
 	payload.BuildParameters.CommitHash = github.PR.Head.GetSHA()
 	payload.BuildParameters.Integration = "github"
 
@@ -122,7 +122,6 @@ func triggerCircleciJob(circleToken string, payload common.CircleApiPayload) (er
 		return
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Accept", "*/*") // without this header, CircleCI doesn't return valid JSON...
 
 	var httpClient = &http.Client{Timeout: 2 * time.Second}
 	_, err = httpClient.Do(request)
