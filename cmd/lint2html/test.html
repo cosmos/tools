@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>GolangCI report</title>
+	</head>
+	<style>
+table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+}
+th, td {
+	padding: 5px;
+}
+table {
+	border-spacing: 15px;
+}
+</style>
+	<body>
+		<h2>Linter warnings for github.com/cosmos/cosmos-sdk (master)</h2>
+		<table style="width:100%" bgcolor="gainsboro">
+		<tr><th>Filename</th><th>Linter</th><th>Warning</th></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/baseapp/baseapp.go#L31">baseapp/baseapp.go:31</a></td><td>unused</td><td>var `mainConsensusParamsKey` is unused</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/staking/simulation/decoder_test.go#L27">x/staking/simulation/decoder_test.go:27</a></td><td>unused</td><td>func `makeTestCodec` is unused</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/store/rootmulti/merkle_map.go#L59">store/rootmulti/merkle_map.go:59</a></td><td>unused</td><td>func `(*merkleMap).kvPairs` is unused</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/client/tx_test.go#L123">x/auth/client/tx_test.go:123</a></td><td>staticcheck</td><td>SA1019: authtypes.NewStdFee is deprecated: NewStdFee returns a new instance of StdFee </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/client/tx_test.go#L124">x/auth/client/tx_test.go:124</a></td><td>staticcheck</td><td>SA1019: authtypes.StdSignature is deprecated: StdSignature represents a sig </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/client/tx_test.go#L139">x/auth/client/tx_test.go:139</a></td><td>staticcheck</td><td>SA1019: authtypes.StdFee is deprecated: StdFee includes the amount of coins paid in fees and the maximum gas to be used by the transaction. The ratio yields an effective &#34;gasprice&#34;, which must be above some miminum to be accepted into the mempool. </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/keeper/keeper_test.go#L4">x/auth/keeper/keeper_test.go:4</a></td><td>goimports</td><td>File is not `goimports`-ed</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/staking/keeper/common_test.go#L4">x/staking/keeper/common_test.go:4</a></td><td>goimports</td><td>File is not `goimports`-ed</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/alias.go#L56">x/auth/alias.go:56</a></td><td>staticcheck</td><td>SA1019: types.NewStdFee is deprecated: NewStdFee returns a new instance of StdFee </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/alias.go#L92">x/auth/alias.go:92</a></td><td>staticcheck</td><td>SA1019: types.StdFee is deprecated: StdFee includes the amount of coins paid in fees and the maximum gas to be used by the transaction. The ratio yields an effective &#34;gasprice&#34;, which must be above some miminum to be accepted into the mempool. </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/alias.go#L94">x/auth/alias.go:94</a></td><td>staticcheck</td><td>SA1019: types.StdSignature is deprecated: StdSignature represents a sig </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/ibc/03-connection/keeper/keeper_test.go#L173">x/ibc/03-connection/keeper/keeper_test.go:173</a></td><td>scopelint</td><td>Using the variable on range scope `tc` in function literal</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/ibc/03-connection/keeper/keeper_test.go#L181">x/ibc/03-connection/keeper/keeper_test.go:181</a></td><td>scopelint</td><td>Using the variable on range scope `tc` in function literal</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/ibc/03-connection/keeper/keeper_test.go#L182">x/ibc/03-connection/keeper/keeper_test.go:182</a></td><td>scopelint</td><td>Using the variable on range scope `i` in function literal</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/ibc/03-connection/keeper/keeper_test.go#L185">x/ibc/03-connection/keeper/keeper_test.go:185</a></td><td>scopelint</td><td>Using the variable on range scope `i` in function literal</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/staking/simulation/decoder_test.go#L5">x/staking/simulation/decoder_test.go:5</a></td><td>goimports</td><td>File is not `goimports`-ed</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/capability/module.go#L117">x/capability/module.go:117</a></td><td>govet</td><td>composites: `github.com/cosmos/cosmos-sdk/x/capability/types.GenesisState` composite literal uses unkeyed fields</td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/ante/ante_test.go#L394">x/auth/ante/ante_test.go:394</a></td><td>staticcheck</td><td>SA1019: types.NewStdFee is deprecated: NewStdFee returns a new instance of StdFee </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/ante/ante_test.go#L401">x/auth/ante/ante_test.go:401</a></td><td>staticcheck</td><td>SA1019: types.NewStdFee is deprecated: NewStdFee returns a new instance of StdFee </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/ante/ante_test.go#L508">x/auth/ante/ante_test.go:508</a></td><td>staticcheck</td><td>SA1019: types.StdFee is deprecated: StdFee includes the amount of coins paid in fees and the maximum gas to be used by the transaction. The ratio yields an effective &#34;gasprice&#34;, which must be above some miminum to be accepted into the mempool. </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/ante/ante_test.go#L778">x/auth/ante/ante_test.go:778</a></td><td>staticcheck</td><td>SA1019: types.StdSignature is deprecated: StdSignature represents a sig </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/auth/ante/basic_test.go#L126">x/auth/ante/basic_test.go:126</a></td><td>staticcheck</td><td>SA1019: types.StdSignature is deprecated: StdSignature represents a sig </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/genutil/types/genesis_state_test.go#L44">x/genutil/types/genesis_state_test.go:44</a></td><td>staticcheck</td><td>SA1019: authtypes.StdFee is deprecated: StdFee includes the amount of coins paid in fees and the maximum gas to be used by the transaction. The ratio yields an effective &#34;gasprice&#34;, which must be above some miminum to be accepted into the mempool. </td></tr>
+		
+		<tr><td><a href="https://github.com/cosmos/cosmos-sdk/blob/master/x/genutil/types/genesis_state_test.go#L56">x/genutil/types/genesis_state_test.go:56</a></td><td>staticcheck</td><td>SA1019: authtypes.StdFee is deprecated: StdFee includes the amount of coins paid in fees and the maximum gas to be used by the transaction. The ratio yields an effective &#34;gasprice&#34;, which must be above some miminum to be accepted into the mempool. </td></tr>
+		
+		</table>
+	<p><i>Page generated at 2020-04-28 11:20:24.828806736 &#43;0000 UTC</i></p>
+	</body>
+</html>
