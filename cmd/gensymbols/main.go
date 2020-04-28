@@ -1,14 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		panic("")
+		fmt.Printf("Usage:\n\tgensymbols directory\n")
+		os.Exit(1)
 	}
+
 	extractor, err := NewPackageExtractor(os.Args[1])
 	if err != nil {
 		panic(err)

@@ -1,4 +1,4 @@
-module github.com/cosmos/tools/cmd/apidump
+module github.com/cosmos/tools/cmd/gensymbols
 
 go 1.14
 
