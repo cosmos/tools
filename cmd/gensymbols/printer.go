@@ -45,7 +45,7 @@ func (p Printer) Print() {
 	}
 
 	var featureCtx = make(map[string]map[string]bool) // feature -> context name -> true
-	ctxName := "test"
+	ctxName := p.packages[0].Name
 	for _, f := range p.Features() {
 		if featureCtx[f] == nil {
 			featureCtx[f] = make(map[string]bool)
@@ -57,7 +57,7 @@ func (p Printer) Print() {
 	for f, cmap := range featureCtx {
 		comma := strings.Index(f, ",")
 		for cname := range cmap {
-			f2 := fmt.Sprintf("%s (%s)%s", f[:comma], cname, f[comma:])
+			f2 := fmt.Sprintf("pkg %s%s", cname, f[comma:])
 			features = append(features, f2)
 		}
 	}

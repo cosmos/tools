@@ -23,7 +23,8 @@ func NewPackageExtractor(dir string) (PackageExtractor, error) {
 
 // extract returns all the packages that are detected in the directory.
 func (e PackageExtractor) Extract() ([]Pkg, error) {
-	cmd := exec.Command("go", "list", "-json", fmt.Sprintf("%s/...", e.dir))
+	cmd := exec.Command("go", "list", "-json",  e.dir)
+	cmd.Dir = e.dir
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
