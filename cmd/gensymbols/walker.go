@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"go/build"
+	"os"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -21,12 +23,21 @@ func NewWalker(pkgs []Pkg) Walker {
 func (w Walker) Extract() ([]*packages.Package, error) {
 	var foundPackages []*packages.Package
 	for _, pkg := range w.packages {
+		err := os.Chdir(pkg.Dir)
+		if err != nil {
+			return nil, err
+		}
+
 		dir, err := packages.Load(&packages.Config{
 			Mode: packages.LoadAllSyntax,
 		}, pkg.Dir)
 		if err != nil {
 			return nil, err
 		}
+
+		fmt.Printf("%s\n", pkg.Dir)
+		packages.PrintErrors(dir)
+
 
 		foundPackages = append(foundPackages, dir...)
 	}
