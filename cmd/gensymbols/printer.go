@@ -45,7 +45,7 @@ func (p Printer) Print() {
 	}
 
 	var featureCtx = make(map[string]map[string]bool) // feature -> context name -> true
-	ctxName := p.packages[0].Name
+	ctxName := p.packages[0].PkgPath
 	for _, f := range p.Features() {
 		if featureCtx[f] == nil {
 			featureCtx[f] = make(map[string]bool)
