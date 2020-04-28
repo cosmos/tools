@@ -1,32 +1,32 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
-
 )
 
 func main() {
+	log.SetFlags(0)
+	log.SetPrefix("gensymbols: ")
 	if len(os.Args) < 2 {
-		fmt.Printf("Usage:\n\tgensymbols directory\n")
-		os.Exit(1)
+		log.Fatal("Usage:\n\tgensymbols directory\n")
+	}
+
+	check := func(err error) {
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	extractor, err := NewPackageExtractor(os.Args[1])
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	pkgs, err := extractor.Extract()
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	walker := NewWalker(pkgs)
 	pkgstypes, err := walker.Extract()
-	if err != nil {
-		panic(err)
-	}
+	check(err)
 
 	printer := NewPrinter(pkgstypes, os.Stdout)
 	printer.Print()
