@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 type PackageExtractor struct {
@@ -28,6 +29,10 @@ func (e PackageExtractor) Extract() ([]Pkg, error) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if strings.Contains(err.Error(), "exit status 1") {
+			return nil, fmt.Errorf("no go files found")
+		}
+
 		return nil, fmt.Errorf("error extracting packages: %s", err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(out))
