@@ -1,4 +1,4 @@
-package parser
+package main
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWalker(t *testing.T) {
+func TestPrinter(t *testing.T) {
 	dir, err := os.Getwd()
 	require.NoError(t, err)
 
@@ -21,5 +21,6 @@ func TestWalker(t *testing.T) {
 	packages, err := walker.Extract()
 	require.NoError(t, err)
 
-	require.Len(t, packages, 1)
+	printer := NewPrinter(packages, os.Stdout)
+	printer.Print()
 }

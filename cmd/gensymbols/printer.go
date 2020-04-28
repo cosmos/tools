@@ -1,4 +1,4 @@
-package parser
+package main
 
 import (
 	"bufio"
@@ -261,7 +261,8 @@ func (p Printer) emitf(format string, args ...interface{}) {
 	}
 
 	if _, dup := p.features[f]; dup {
-		panic("duplicate feature inserted: " + f)
+		return
+		//panic("duplicate feature inserted: " + f)
 	}
 	p.features[f] = true
 }
