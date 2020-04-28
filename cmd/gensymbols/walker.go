@@ -35,10 +35,6 @@ func (w Walker) Extract() ([]*packages.Package, error) {
 			return nil, err
 		}
 
-		fmt.Printf("%s\n", pkg.Dir)
-		packages.PrintErrors(dir)
-
-
 		foundPackages = append(foundPackages, dir...)
 	}
 
