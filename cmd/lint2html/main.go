@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 )
 
 type Pos struct {
@@ -59,6 +60,7 @@ table {
 		<tr><td><a href="{{fileLineURL .Pos}}">{{fileLineText .Pos}}</a></td><td>{{ .FromLinter }}</td><td>{{ .Text }}</td></tr>
 		{{end}}
 		</table>
+	<p><i>Page generated at {{ .Time }}</i></p>
 	</body>
 </html>`
 
@@ -95,6 +97,7 @@ func main() {
 		Repository: repo,
 		Branch:     branch,
 		Issues:     data.Issues,
+		Time:       time.Now().UTC(),
 	}))
 }
 
@@ -102,4 +105,5 @@ type container struct {
 	Repository string
 	Branch     string
 	Issues     []Issue
+	Time       time.Time
 }
