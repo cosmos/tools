@@ -28,7 +28,7 @@ func (w Walker) Extract() ([]*packages.Package, error) {
 		}
 
 		dir, err := packages.Load(&packages.Config{
-			Mode: packages.LoadAllSyntax,
+			Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes,
 		}, pkg.Dir)
 		if err != nil {
 			return nil, err
