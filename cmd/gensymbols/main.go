@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func main() {
@@ -18,10 +20,10 @@ func main() {
 		}
 	}
 
-	extractor, err := NewPackageExtractor(os.Args[1])
+	dir, err := absPath(os.Args[1])
 	check(err)
 
-	pkgs, err := extractor.Extract()
+	pkgs, err := PackageExtractor{dir: dir}.Extract()
 	check(err)
 
 	walker := NewWalker(pkgs)
@@ -30,4 +32,11 @@ func main() {
 
 	printer := NewPrinter(pkgstypes, os.Stdout)
 	printer.Print()
+}
+
+func absPath(dir string) (string, error) {
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("invalid directory %s", dir)
+	}
+	return filepath.Abs(dir)
 }

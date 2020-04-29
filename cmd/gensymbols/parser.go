@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -14,17 +13,9 @@ type PackageExtractor struct {
 	dir string
 }
 
-func NewPackageExtractor(dir string) (PackageExtractor, error) {
-	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		return PackageExtractor{}, fmt.Errorf("invalid directory %s", dir)
-	}
-
-	return PackageExtractor{dir: dir}, nil
-}
-
 // extract returns all the packages that are detected in the directory.
 func (e PackageExtractor) Extract() ([]Pkg, error) {
-	cmd := exec.Command("go", "list", "-json",  e.dir)
+	cmd := exec.Command("go", "list", "-json", e.dir)
 	cmd.Dir = e.dir
 
 	out, err := cmd.CombinedOutput()
