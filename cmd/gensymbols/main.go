@@ -15,9 +15,7 @@ func main() {
 
 	log.SetFlags(0)
 	log.SetPrefix("gensymbols: ")
-	if len(flag.Args()) < 1 {
-		log.Fatal("Usage:\n\tgensymbols [flags] directory\n\t-r\truns the command recursively")
-	}
+	validateArgs()
 
 	check := func(err error) {
 		if err != nil {
@@ -44,5 +42,12 @@ func absPath(dir string) (string, error) {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("invalid directory %s", dir)
 	}
+
 	return filepath.Abs(dir)
+}
+
+func validateArgs() {
+	if len(flag.Args()) != 1 {
+		log.Fatal("Usage:\n\tgensymbols [flags] directory\n\t-r\truns the command recursively")
+	}
 }
