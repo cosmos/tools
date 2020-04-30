@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 // extract returns all the packages that are detected in the directory.
-func ExtractPackageNames(dir string) ([]Pkg, error) {
-	cmd := exec.Command("go", "list", "-json", dir)
+func ExtractPackageNames(dir string, recursive bool) ([]Pkg, error) {
+	d := dir
+	if recursive {
+		d = filepath.Join(d, "...")
+	}
+
+	cmd := exec.Command("go", "list", "-json", d)
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()

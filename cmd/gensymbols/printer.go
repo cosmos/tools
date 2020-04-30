@@ -18,7 +18,7 @@ import (
 type Printer struct {
 	output   io.Writer
 
-	features map[string]bool // set
+	features map[string]bool
 	scope    []string
 	current  *types.Package
 }

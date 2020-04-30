@@ -12,23 +12,21 @@ type Walker struct {
 	context  build.Context
 }
 
-func Extract(pkgs []Pkg) ([]*packages.Package, error) {
+func Extract(pkg Pkg) ([]*packages.Package, error) {
 	var foundPackages []*packages.Package
-	for _, pkg := range pkgs {
-		err := os.Chdir(pkg.Dir)
-		if err != nil {
-			return nil, err
-		}
-
-		dir, err := packages.Load(&packages.Config{
-			Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes,
-		}, pkg.Dir)
-		if err != nil {
-			return nil, err
-		}
-
-		foundPackages = append(foundPackages, dir...)
+	err := os.Chdir(pkg.Dir)
+	if err != nil {
+		return nil, err
 	}
+
+	dir, err := packages.Load(&packages.Config{
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes,
+	}, pkg.Dir)
+	if err != nil {
+		return nil, err
+	}
+
+	foundPackages = append(foundPackages, dir...)
 
 	return foundPackages, nil
 }
