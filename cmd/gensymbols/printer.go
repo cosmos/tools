@@ -16,7 +16,7 @@ import (
 )
 
 type Printer struct {
-	output   io.Writer
+	output io.Writer
 
 	features map[string]bool
 	scope    []string
@@ -25,7 +25,7 @@ type Printer struct {
 
 func NewPrinter(output io.Writer) Printer {
 	return Printer{
-		output:   output,
+		output: output,
 
 		features: map[string]bool{},
 	}
@@ -67,7 +67,7 @@ func (p Printer) Print(packages []*packages.Package) {
 		}
 	}()
 
-	bw := bufio.NewWriter(os.Stdout)
+	bw := bufio.NewWriter(p.output)
 	defer bw.Flush()
 
 	sort.Strings(features)
