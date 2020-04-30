@@ -9,14 +9,10 @@ import (
 	"strings"
 )
 
-type PackageExtractor struct {
-	dir string
-}
-
 // extract returns all the packages that are detected in the directory.
-func (e PackageExtractor) Extract() ([]Pkg, error) {
-	cmd := exec.Command("go", "list", "-json", e.dir)
-	cmd.Dir = e.dir
+func ExtractPackageNames(dir string) ([]Pkg, error) {
+	cmd := exec.Command("go", "list", "-json", dir)
+	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

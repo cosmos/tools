@@ -12,16 +12,9 @@ type Walker struct {
 	context  build.Context
 }
 
-func NewWalker(pkgs []Pkg) Walker {
-	return Walker{
-		packages: pkgs,
-		context:  build.Default,
-	}
-}
-
-func (w Walker) Extract() ([]*packages.Package, error) {
+func Extract(pkgs []Pkg) ([]*packages.Package, error) {
 	var foundPackages []*packages.Package
-	for _, pkg := range w.packages {
+	for _, pkg := range pkgs {
 		err := os.Chdir(pkg.Dir)
 		if err != nil {
 			return nil, err

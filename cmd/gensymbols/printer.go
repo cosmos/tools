@@ -17,24 +17,22 @@ import (
 
 type Printer struct {
 	output   io.Writer
-	packages []*packages.Package
 
 	features map[string]bool // set
 	scope    []string
 	current  *types.Package
 }
 
-func NewPrinter(packages []*packages.Package, output io.Writer) Printer {
+func NewPrinter(output io.Writer) Printer {
 	return Printer{
 		output:   output,
-		packages: packages,
 
 		features: map[string]bool{},
 	}
 }
 
-func (p Printer) Print() {
-	for _, pkg := range p.packages {
+func (p Printer) Print(packages []*packages.Package) {
+	for _, pkg := range packages {
 		thePkg := pkg.Types
 		scope := thePkg.Scope()
 		for _, name := range scope.Names() {
@@ -45,7 +43,7 @@ func (p Printer) Print() {
 	}
 
 	var featureCtx = make(map[string]map[string]bool) // feature -> context name -> true
-	ctxName := p.packages[0].PkgPath
+	ctxName := packages[0].PkgPath
 	for _, f := range p.Features() {
 		if featureCtx[f] == nil {
 			featureCtx[f] = make(map[string]bool)

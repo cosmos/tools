@@ -23,15 +23,14 @@ func main() {
 	dir, err := absPath(os.Args[1])
 	check(err)
 
-	pkgs, err := PackageExtractor{dir: dir}.Extract()
+	pkgs, err := ExtractPackageNames(dir)
 	check(err)
 
-	walker := NewWalker(pkgs)
-	pkgstypes, err := walker.Extract()
+	pkgstypes, err := Extract(pkgs)
 	check(err)
 
-	printer := NewPrinter(pkgstypes, os.Stdout)
-	printer.Print()
+	printer := NewPrinter(os.Stdout)
+	printer.Print(pkgstypes)
 }
 
 func absPath(dir string) (string, error) {
