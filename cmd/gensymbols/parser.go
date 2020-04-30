@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+type Pkg struct {
+	ImportPath, Dir string
+}
+
 // extract returns all the packages that are detected in the directory.
 func ExtractPackageNames(dir string, recursive bool) ([]Pkg, error) {
 	d := dir
