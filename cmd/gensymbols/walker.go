@@ -8,7 +8,6 @@ import (
 )
 
 type Walker struct {
-	packages []Pkg
 	context  build.Context
 }
 
