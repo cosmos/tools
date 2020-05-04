@@ -32,6 +32,8 @@ func NewPrinter(output io.Writer) Printer {
 }
 
 func (p Printer) Print(packages []*packages.Package) {
+	p.features = map[string]bool{}
+
 	for _, pkg := range packages {
 		thePkg := pkg.Types
 		scope := thePkg.Scope()
