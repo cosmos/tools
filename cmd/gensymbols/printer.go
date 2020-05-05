@@ -31,7 +31,7 @@ func NewPrinter(output io.Writer) Printer {
 	}
 }
 
-func (p Printer) Print(packages []*packages.Package) {
+func (p *Printer) Print(packages []*packages.Package) {
 	p.features = map[string]bool{}
 
 	for _, pkg := range packages {
@@ -78,7 +78,7 @@ func (p Printer) Print(packages []*packages.Package) {
 	}
 }
 
-func (p Printer) Features() (fs []string) {
+func (p *Printer) Features() (fs []string) {
 	for f := range p.features {
 		fs = append(fs, f)
 	}
@@ -86,7 +86,7 @@ func (p Printer) Features() (fs []string) {
 	return
 }
 
-func (p Printer) printObj(obj types.Object) {
+func (p *Printer) printObj(obj types.Object) {
 	switch obj := obj.(type) {
 	case *types.Const:
 		p.emitf("const %s %s", obj.Name(), p.typeString(obj.Type()))
@@ -109,13 +109,13 @@ func (p Printer) printObj(obj types.Object) {
 	}
 }
 
-func (p Printer) typeString(typ types.Type) string {
+func (p *Printer) typeString(typ types.Type) string {
 	var buf bytes.Buffer
 	p.writeType(&buf, typ)
 	return buf.String()
 }
 
-func (p Printer) writeType(buf *bytes.Buffer, typ types.Type) {
+func (p *Printer) writeType(buf *bytes.Buffer, typ types.Type) {
 	switch typ := typ.(type) {
 	case *types.Basic:
 		s := typ.Name()
@@ -224,7 +224,7 @@ func sortedMethodNames(typ *types.Interface) []string {
 	return list
 }
 
-func (p Printer) writeSignature(buf *bytes.Buffer, sig *types.Signature) {
+func (p *Printer) writeSignature(buf *bytes.Buffer, sig *types.Signature) {
 	p.writeParams(buf, sig.Params(), sig.Variadic())
 	switch res := sig.Results(); res.Len() {
 	case 0:
@@ -238,7 +238,7 @@ func (p Printer) writeSignature(buf *bytes.Buffer, sig *types.Signature) {
 	}
 }
 
-func (p Printer) writeParams(buf *bytes.Buffer, t *types.Tuple, variadic bool) {
+func (p *Printer) writeParams(buf *bytes.Buffer, t *types.Tuple, variadic bool) {
 	buf.WriteByte('(')
 	for i, n := 0, t.Len(); i < n; i++ {
 		if i > 0 {
@@ -254,7 +254,7 @@ func (p Printer) writeParams(buf *bytes.Buffer, t *types.Tuple, variadic bool) {
 	buf.WriteByte(')')
 }
 
-func (p Printer) emitf(format string, args ...interface{}) {
+func (p *Printer) emitf(format string, args ...interface{}) {
 	f := strings.Join(p.scope, ", ") + ", " + fmt.Sprintf(format, args...)
 	if strings.Contains(f, "\n") {
 		panic("feature contains newlines: " + f)
@@ -267,7 +267,7 @@ func (p Printer) emitf(format string, args ...interface{}) {
 	p.features[f] = true
 }
 
-func (p Printer) emitType(obj *types.TypeName) {
+func (p *Printer) emitType(obj *types.TypeName) {
 	name := obj.Name()
 	typ := obj.Type()
 	switch typ := typ.Underlying().(type) {
@@ -306,7 +306,7 @@ func (p Printer) emitType(obj *types.TypeName) {
 	}
 }
 
-func (p Printer) emitStructType(name string, typ *types.Struct) {
+func (p *Printer) emitStructType(name string, typ *types.Struct) {
 	typeStruct := fmt.Sprintf("type %s struct", name)
 	p.emitf(typeStruct)
 	defer p.pushScope(typeStruct)()
@@ -328,7 +328,7 @@ func (p Printer) emitStructType(name string, typ *types.Struct) {
 // pushScope enters a new scope (walking a package, type, node, etc)
 // and returns a function that will leave the scope (with sanity checking
 // for mismatched pushes & pops)
-func (p Printer) pushScope(name string) (popFunc func()) {
+func (p *Printer) pushScope(name string) (popFunc func()) {
 	p.scope = append(p.scope, name)
 	return func() {
 		if len(p.scope) == 0 {
@@ -341,7 +341,7 @@ func (p Printer) pushScope(name string) (popFunc func()) {
 	}
 }
 
-func (p Printer) emitFunc(f *types.Func) {
+func (p *Printer) emitFunc(f *types.Func) {
 	sig := f.Type().(*types.Signature)
 	if sig.Recv() != nil {
 		panic("method considered a regular function: " + f.String())
@@ -349,13 +349,13 @@ func (p Printer) emitFunc(f *types.Func) {
 	p.emitf("func %s%s", f.Name(), p.signatureString(sig))
 }
 
-func (p Printer) signatureString(sig *types.Signature) string {
+func (p *Printer) signatureString(sig *types.Signature) string {
 	var buf bytes.Buffer
 	p.writeSignature(&buf, sig)
 	return buf.String()
 }
 
-func (p Printer) emitMethod(m *types.Selection) {
+func (p *Printer) emitMethod(m *types.Selection) {
 	sig := m.Type().(*types.Signature)
 	recv := sig.Recv().Type()
 	// report exported methods with unexported receiver base type
@@ -371,8 +371,8 @@ func (p Printer) emitMethod(m *types.Selection) {
 	p.emitf("method (%s) %s%s", p.typeString(recv), m.Obj().Name(), p.signatureString(sig))
 }
 
-func (p Printer) emitIfaceType(name string, typ *types.Interface) {
-	pop := p.pushScope("type " + name + " interface")
+func (p *Printer) emitIfaceType(name string, typ *types.Interface) {
+	pop := p.pushScope(", type " + name + " interface")
 
 	var methodNames []string
 	complete := true

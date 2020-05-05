@@ -1,15 +1,10 @@
 package main
 
 import (
-	"go/build"
 	"os"
 
 	"golang.org/x/tools/go/packages"
 )
-
-type Walker struct {
-	context  build.Context
-}
 
 func Extract(pkg Pkg) ([]*packages.Package, error) {
 	var foundPackages []*packages.Package
