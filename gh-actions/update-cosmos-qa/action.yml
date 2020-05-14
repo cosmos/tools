@@ -1,0 +1,17 @@
+name: update-cosmos-qa
+description: GitHub action for uploading golanci-lint results to qa.cosmos.network website
+inputs:
+  golangci_timeout:
+    description: timeout
+    default: 10m
+  golangci_presets:
+    description: Presets to enable
+    default: bugs,complexity,format,performance,style,unused
+  github_token:
+    description: Token to access qa.cosmos.network repo
+    required: true
+  custom_file_name:
+    description: Custom file name to upload
+runs:
+  using: docker
+  image: Dockerfile
