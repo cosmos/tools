@@ -33,6 +33,8 @@ jobs:
           app_name: slack
       - build:
           app_name: github
+      - build:
+          app_name: cmpsemver
 
 workflows:
   version: 2
