@@ -27,6 +27,7 @@ func initFlags() {
 	flag.BoolVar(&notifyGithub, "Github", false, "update github check")
 	flag.BoolVar(&exitOnFail, "ExitOnFail", false, "exit on fail during multi-sim, print error")
 	flag.IntVar(&jobs, "Jobs", jobs, "number of parallel processes")
+	flag.DurationVar(&timeout, "Timeout", defaultTimeout, "simulations fail if they run longer than the supplied timeout")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(flag.CommandLine.Output(),
